@@ -53,6 +53,8 @@ export interface ContainerInput {
   readonly prisma: PrismaClient;
   readonly logger: Logger;
   readonly frontendOrigin: string;
+  /** Express `trust proxy`: which hop may report the client address. */
+  readonly trustProxy: string | false;
   readonly settings: ContainerSettings;
   /** Overridden in tests so an issued session always lands on the same instant. */
   readonly clock?: Clock;
@@ -146,6 +148,7 @@ export function buildContainer(input: ContainerInput): AppDependencies {
   return {
     logger: input.logger,
     frontendOrigin: input.frontendOrigin,
+    trustProxy: input.trustProxy,
     health: {
       isDatabaseReachable: async () => {
         await input.prisma.$queryRaw`SELECT 1`;

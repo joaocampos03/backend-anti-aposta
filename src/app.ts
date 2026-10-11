@@ -19,6 +19,11 @@ const JSON_BODY_LIMIT = '100kb';
 export interface AppDependencies {
   readonly logger: Logger;
   readonly frontendOrigin: string;
+  /**
+   * Set before any middleware reads `request.ip`: the rate limits key on it, and
+   * so does the error funnel's fingerprint.
+   */
+  readonly trustProxy: string | false;
   readonly health: HealthDependencies;
   readonly identity: IdentityRouteDependencies;
 }
@@ -28,6 +33,7 @@ export function createApp(dependencies: AppDependencies): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  app.set('trust proxy', dependencies.trustProxy);
   app.use(helmet());
   app.use(cors({ origin: dependencies.frontendOrigin, credentials: true }));
   app.use(requestId);

@@ -10,6 +10,19 @@ const environmentSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3333),
   DATABASE_URL: z.string().min(1),
   FRONTEND_ORIGIN: z.string().url(),
+  /**
+   * Who may report a client address through `X-Forwarded-For`, in Express
+   * `trust proxy` syntax (`loopback`, an address, a CIDR, a comma-separated
+   * list), or `none`. Every browser request reaches this API through the Next.js
+   * server, so without this every per-IP limit would count all users as one —
+   * one person could spend the sign-in quota for everybody. Name the Next.js
+   * server's address and nothing wider: a trusted hop can claim any address.
+   */
+  TRUST_PROXY: z
+    .string()
+    .min(1)
+    .default('loopback')
+    .transform((value) => (value === 'none' ? false : value)),
   SESSION_TTL_IN_DAYS: z.coerce.number().int().positive().max(365).default(14),
   /** A session this close to expiring is extended when it is used. */
   SESSION_RENEW_WITHIN_DAYS: z.coerce.number().int().positive().max(365).default(7),

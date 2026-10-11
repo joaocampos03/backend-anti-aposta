@@ -77,6 +77,14 @@ The per-IP net (`SIGN_IN_ATTEMPTS_PER_QUARTER_HOUR`, default 50) is a separate, 
 `SignInThrottle` is keyed by address, so spraying one attempt each across a thousand addresses would
 otherwise slip past it. That number is an assumed default, not a decision the handoff gave.
 
+**Every per-IP limit depends on `TRUST_PROXY`.** Browsers never call this API directly — every
+request arrives from the Next.js server, which forwards the visitor's address in `X-Forwarded-For`.
+Express honours that header only from the hops `TRUST_PROXY` names (default `loopback`). Too narrow,
+and every user shares one quota, so one person can spend the sign-in limit for everybody; too wide,
+and any caller can claim a fresh address per request and the limit stops counting anything. Name the
+Next.js server's address, nothing more. Both directions are covered in
+`register-user.route.spec.ts`.
+
 **Sign-in enforces no minimum password length**, and must never acquire one: a length rule on an
 *existing* credential locks out whoever set a shorter password before the policy existed.
 `Password.attempt` exists for exactly this, next to `Password.create` which does gate.
