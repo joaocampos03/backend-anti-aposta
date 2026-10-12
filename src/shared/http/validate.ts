@@ -2,6 +2,13 @@ import type { Request, RequestHandler } from 'express';
 import type { ZodError, ZodIssue, ZodType } from 'zod';
 import type { AppError, AppErrorDetails } from '../application/app-error.js';
 
+export interface ValidatedInput<TValue> {
+  /** Parses once, before the controller runs. */
+  readonly middleware: RequestHandler;
+  /** The only way a controller reads request input. */
+  read(request: Request): TValue;
+}
+
 export interface ValidatedBody<TValue> {
   /** Parses once, before the controller runs. */
   readonly middleware: RequestHandler;
@@ -57,6 +64,76 @@ export function validateBody<TValue>(
 
     read: (request) => {
       const parsed = parsedBodies.get(request);
+
+      if (parsed === undefined) {
+        throw new Error('Route is missing its validate middleware');
+      }
+
+      return parsed;
+    },
+  };
+}
+
+/**
+ * The same contract for the query string. The delivery layer of the frontend
+ * normalises a bad query before calling, so a failure here is a bug on that
+ * side rather than something a person typed.
+ */
+export function validateQuery<TValue>(
+  schema: ZodType<TValue>,
+  onInvalid: (details: AppErrorDetails) => AppError,
+): ValidatedInput<TValue> {
+  const parsedQueries = new WeakMap<Request, TValue>();
+
+  return {
+    middleware: (request, _response, next) => {
+      const parsed = schema.safeParse(request.query);
+
+      if (!parsed.success) {
+        next(onInvalid(detailsFrom(parsed.error)));
+
+        return;
+      }
+
+      parsedQueries.set(request, parsed.data);
+      next();
+    },
+
+    read: (request) => {
+      const parsed = parsedQueries.get(request);
+
+      if (parsed === undefined) {
+        throw new Error('Route is missing its validate middleware');
+      }
+
+      return parsed;
+    },
+  };
+}
+
+/** The same contract for path parameters, which Express types loosely. */
+export function validateParams<TValue>(
+  schema: ZodType<TValue>,
+  onInvalid: (details: AppErrorDetails) => AppError,
+): ValidatedInput<TValue> {
+  const parsedParams = new WeakMap<Request, TValue>();
+
+  return {
+    middleware: (request, _response, next) => {
+      const parsed = schema.safeParse(request.params);
+
+      if (!parsed.success) {
+        next(onInvalid(detailsFrom(parsed.error)));
+
+        return;
+      }
+
+      parsedParams.set(request, parsed.data);
+      next();
+    },
+
+    read: (request) => {
+      const parsed = parsedParams.get(request);
 
       if (parsed === undefined) {
         throw new Error('Route is missing its validate middleware');

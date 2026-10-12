@@ -13,12 +13,14 @@ const app = createApp(
     trustProxy: env.TRUST_PROXY,
     settings: {
       consentPolicyVersion: env.REGISTRATION_CONSENT_POLICY_VERSION,
+      timeZone: env.TIME_ZONE,
       sessionLifetimeInDays: env.SESSION_TTL_IN_DAYS,
       sessionRenewWithinDays: env.SESSION_RENEW_WITHIN_DAYS,
       registrationAttemptsPerHour: env.REGISTRATION_ATTEMPTS_PER_HOUR,
       registrationSuccessesPerHour: env.REGISTRATION_SUCCESSES_PER_HOUR,
       signInAttemptsPerQuarterHour: env.SIGN_IN_ATTEMPTS_PER_QUARTER_HOUR,
       passwordResetAttemptsPerHour: env.PASSWORD_RESET_ATTEMPTS_PER_HOUR,
+      classificationOverridesPerHour: env.CLASSIFICATION_OVERRIDES_PER_HOUR,
     },
   }),
 );

@@ -27,6 +27,11 @@ const environmentSchema = z.object({
   /** A session this close to expiring is extended when it is used. */
   SESSION_RENEW_WITHIN_DAYS: z.coerce.number().int().positive().max(365).default(7),
   REGISTRATION_CONSENT_POLICY_VERSION: z.string().min(1),
+  /**
+   * Day and month boundaries. A bet at 23:30 in São Paulo belongs to that day;
+   * bucketing in UTC would move it and cost somebody a streak day.
+   */
+  TIME_ZONE: z.string().min(1).default('America/Sao_Paulo'),
   REGISTRATION_ATTEMPTS_PER_HOUR: z.coerce.number().int().positive().default(20),
   REGISTRATION_SUCCESSES_PER_HOUR: z.coerce.number().int().positive().default(5),
   /**
@@ -35,6 +40,8 @@ const environmentSchema = z.object({
    */
   SIGN_IN_ATTEMPTS_PER_QUARTER_HOUR: z.coerce.number().int().positive().default(50),
   PASSWORD_RESET_ATTEMPTS_PER_HOUR: z.coerce.number().int().positive().default(10),
+  /** So a script cannot rewrite a betting history through the override endpoint. */
+  CLASSIFICATION_OVERRIDES_PER_HOUR: z.coerce.number().int().positive().default(30),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

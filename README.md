@@ -41,11 +41,20 @@ container; override it with `TEST_DATABASE_URL`.
 | `GET`    | `/api/v1/identity/sessions/current`  | session token     | Resolve the token into "who is asking"; slides the session |
 | `DELETE` | `/api/v1/identity/sessions/current`  | session token     | Sign out; idempotent, always `204`                   |
 | `POST`   | `/api/v1/identity/password-resets`   | reset token       | Consume the token, set a new password, revoke every session |
+| `GET`    | `/api/v1/transactions`               | session           | The statement: a filtered page plus the totals for the whole slice |
+| `GET`    | `/api/v1/transactions/monthly-summary` | session         | The charts: per-calendar-month totals per category     |
+| `POST`   | `/api/v1/transactions/{id}/classification-override` | session | Record "isto não é uma aposta"            |
+| `DELETE` | `/api/v1/transactions/{id}/classification-override` | session | Undo that correction                      |
+| `GET`    | `/api/v1/accounts`                   | session           | The connected accounts behind the filter             |
+| `GET`    | `/api/v1/awareness/support-offer`    | session           | Whether to surface support resources, and what was counted |
 | `GET`    | `/health`                            | none              | Liveness, no dependencies                            |
 | `GET`    | `/ready`                             | none              | Readiness, checks Postgres                           |
 
 `POST /api/v1/identity/password-reset-requests` is specified in `docs/features/login.md` but not
 built: it needs a mail provider and the e-mail's Portuguese copy, neither of which exists yet.
+The Open Finance connection flow (OAuth against a DataHolder, the `sandbox-bank` context) is not
+built either — `npm run db:seed` writes a synthetic twelve-month history through the same use
+cases instead, and prints the demo credentials it created.
 
 Each of those is documented as a PDF reference in [docs/api/](docs/api/) —
 `identity-endpoints.pdf` (registration, session resolution) and `login-endpoints.pdf` (sign-in,
