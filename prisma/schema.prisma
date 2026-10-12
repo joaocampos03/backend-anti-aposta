@@ -81,10 +81,10 @@ model PasswordResetToken {
 // ---------------------------------------------------------------------------
 // open-finance — consent lifecycle (DataRecipient side)
 //
-// Only the read side of Consent exists today: `identity` needs to answer
-// "has this user authorised an Open Finance consent?" on every authenticated
-// page, and registration's contract is that a brand-new user answers `false`.
-// The Consent aggregate and its write path arrive with the Open Finance feature.
+// The consent is requested here, authorised at the DataHolder (`sandbox-bank`,
+// reached over HTTP), and every transaction is ingested through it. Nothing in
+// this section has a foreign key to the sandbox's tables: the two meet only in
+// the Open Finance protocol.
 // ---------------------------------------------------------------------------
 
 enum ConsentStatus {
@@ -98,17 +98,51 @@ enum ConsentStatus {
 }
 
 model Consent {
-  id           String             @id @db.Uuid
-  userId       String             @map("user_id") @db.Uuid
-  status       ConsentStatus
-  createdAt    DateTime           @map("created_at") @db.Timestamptz(3)
-  expiresAt    DateTime           @map("expires_at") @db.Timestamptz(3)
+  id                   String                @id @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  /// The consent's id at the DataHolder, which is what its tokens are bound to.
+  externalConsentId    String                @map("external_consent_id") @db.VarChar(100)
+  status               ConsentStatus
+  createdAt            DateTime              @map("created_at") @db.Timestamptz(3)
+  expiresAt            DateTime              @map("expires_at") @db.Timestamptz(3)
   /// Null until the first ingestion finishes: that is what SYNCING means.
-  lastSyncedAt DateTime?          @map("last_synced_at") @db.Timestamptz(3)
-  accounts     ConnectedAccount[]
+  lastSyncedAt         DateTime?             @map("last_synced_at") @db.Timestamptz(3)
+  accounts             ConnectedAccount[]
+  authorisationRequest AuthorisationRequest?
+  tokens               ConsentToken?
 
   @@index([userId, status])
   @@map("open_finance_consents")
+}
+
+/// The OAuth round trip in flight: the `state` that must come back and the PKCE
+/// verifier that proves this platform started it. Single use, minutes long, and
+/// deleted once the callback arrives. Only the state's fingerprint is stored.
+model AuthorisationRequest {
+  consentId              String   @id @map("consent_id") @db.Uuid
+  userId                 String   @map("user_id") @db.Uuid
+  stateFingerprint       String   @map("state_fingerprint") @db.VarChar(64)
+  codeVerifierCiphertext String   @map("code_verifier_ciphertext")
+  createdAt              DateTime @map("created_at") @db.Timestamptz(3)
+  expiresAt              DateTime @map("expires_at") @db.Timestamptz(3)
+  consent                Consent  @relation(fields: [consentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("open_finance_authorisation_requests")
+}
+
+/// The DataHolder's tokens, AES-256-GCM encrypted. Decrypted only inside
+/// `infrastructure/`, never logged, never returned.
+model ConsentToken {
+  consentId              String   @id @map("consent_id") @db.Uuid
+  userId                 String   @map("user_id") @db.Uuid
+  accessTokenCiphertext  String   @map("access_token_ciphertext")
+  refreshTokenCiphertext String   @map("refresh_token_ciphertext")
+  accessTokenExpiresAt   DateTime @map("access_token_expires_at") @db.Timestamptz(3)
+  consent                Consent  @relation(fields: [consentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("open_finance_consent_tokens")
 }
 
 enum AccountKind {
@@ -158,6 +192,8 @@ model ConnectedAccount {
   id           String        @id @db.Uuid
   userId       String        @map("user_id") @db.Uuid
   consentId    String        @map("consent_id") @db.Uuid
+  /// The DataHolder's account id: what a statement is requested by.
+  externalId   String        @map("external_id") @db.VarChar(100)
   institution  String        @db.VarChar(120)
   shortName    String        @map("short_name") @db.VarChar(60)
   product      String        @db.VarChar(60)
@@ -167,6 +203,7 @@ model ConnectedAccount {
   consent      Consent       @relation(fields: [consentId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
+  @@unique([consentId, externalId])
   @@index([userId])
   @@index([consentId])
   @@map("open_finance_connected_accounts")
@@ -183,6 +220,9 @@ model Transaction {
   id            String              @id @db.Uuid
   userId        String              @map("user_id") @db.Uuid
   accountId     String              @map("account_id") @db.Uuid
+  /// The DataHolder's transaction id. Unique per account, which is what makes a
+  /// second synchronisation of the same statement a no-op.
+  externalId    String              @map("external_id") @db.VarChar(100)
   occurredAt    DateTime            @map("occurred_at") @db.Timestamptz(3)
   amountInCents Int                 @map("amount_in_cents")
   counterparty  String              @db.VarChar(140)
@@ -196,6 +236,7 @@ model Transaction {
   overriddenAt  DateTime?           @map("overridden_at") @db.Timestamptz(3)
   account       ConnectedAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
+  @@unique([accountId, externalId])
   @@index([userId, occurredAt(sort: Desc), id(sort: Desc)])
   @@index([userId, accountId])
   @@map("open_finance_transactions")
@@ -320,4 +361,161 @@ model Inbox {
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
 
   @@map("notifications_inboxes")
+}
+
+// ---------------------------------------------------------------------------
+// sandbox-bank — the simulated DataHolder (instituição transmissora)
+//
+// A foreign system that happens to share the process and the database. Nothing
+// outside `sandbox-bank` reads these tables: `open-finance` reaches this data
+// only through the Open Finance HTTP surface. `customer_id` is the platform
+// user standing in for the bank's own login, kept as a bare uuid.
+// ---------------------------------------------------------------------------
+
+enum SandboxAccountType {
+  CONTA_DEPOSITO_A_VISTA
+  CARTAO_CREDITO
+
+  @@map("sandbox_bank_account_type")
+}
+
+enum SandboxEntryType {
+  PIX
+  TED
+  BOLETO
+  CONVENIO_ARRECADACAO
+  CARTAO
+  FOLHA_PAGAMENTO
+  TRANSFERENCIA_MESMA_INSTITUICAO
+
+  @@map("sandbox_bank_entry_type")
+}
+
+enum SandboxEntryStatus {
+  TRANSACAO_EFETIVADA
+  LANCAMENTO_FUTURO
+
+  @@map("sandbox_bank_entry_status")
+}
+
+enum SandboxConsentStatus {
+  AWAITING_AUTHORISATION
+  AUTHORISED
+  REJECTED
+  REVOKED
+
+  @@map("sandbox_bank_consent_status")
+}
+
+enum SandboxPermission {
+  ACCOUNTS_READ
+  ACCOUNTS_TRANSACTIONS_READ
+  RESOURCES_READ
+
+  @@map("sandbox_bank_permission")
+}
+
+enum SandboxTokenKind {
+  ACCESS
+  REFRESH
+
+  @@map("sandbox_bank_token_kind")
+}
+
+enum SandboxTokenScope {
+  CONSENTS
+  ACCOUNTS
+
+  @@map("sandbox_bank_token_scope")
+}
+
+/// The full number and check digit live here, as they would at a bank. The
+/// DataRecipient masks them the moment they arrive.
+model SandboxBankAccount {
+  id          String               @id @db.Uuid
+  customerId  String               @map("customer_id") @db.Uuid
+  type        SandboxAccountType
+  brandName   String               @map("brand_name") @db.VarChar(80)
+  companyCnpj String               @map("company_cnpj") @db.VarChar(14)
+  compeCode   String               @map("compe_code") @db.VarChar(3)
+  branchCode  String               @map("branch_code") @db.VarChar(4)
+  number      String               @db.VarChar(20)
+  checkDigit  String               @map("check_digit") @db.VarChar(1)
+  openedAt    DateTime             @map("opened_at") @db.Timestamptz(3)
+  entries     SandboxLedgerEntry[]
+
+  @@index([customerId])
+  @@map("sandbox_bank_accounts")
+}
+
+/// Signed integer cents: negative leaves the account. `transaction_name` is the
+/// raw statement line, exactly as a bank would print it.
+model SandboxLedgerEntry {
+  id                   String             @id @db.Uuid
+  accountId            String             @map("account_id") @db.Uuid
+  customerId           String             @map("customer_id") @db.Uuid
+  bookedAt             DateTime           @map("booked_at") @db.Timestamptz(3)
+  amountInCents        Int                @map("amount_in_cents")
+  transactionName      String             @map("transaction_name") @db.VarChar(140)
+  type                 SandboxEntryType
+  status               SandboxEntryStatus
+  merchantCategoryCode Int?               @map("merchant_category_code")
+  payeeDocument        String?            @map("payee_document") @db.VarChar(14)
+  account              SandboxBankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, bookedAt(sort: Desc), id(sort: Desc)])
+  @@map("sandbox_bank_ledger_entries")
+}
+
+/// The bank's side of the consent. `customer_id` is null until somebody
+/// authorises it: before that, the bank does not know whose it is.
+model SandboxConsent {
+  id              String               @id @db.Uuid
+  clientId        String               @map("client_id") @db.VarChar(64)
+  status          SandboxConsentStatus
+  permissions     SandboxPermission[]
+  customerId      String?              @map("customer_id") @db.Uuid
+  accountIds      String[]             @map("account_ids") @db.Uuid
+  createdAt       DateTime             @map("created_at") @db.Timestamptz(3)
+  statusUpdatedAt DateTime             @map("status_updated_at") @db.Timestamptz(3)
+  expiresAt       DateTime             @map("expires_at") @db.Timestamptz(3)
+
+  @@index([clientId])
+  @@map("sandbox_bank_consents")
+}
+
+/// Single use, minutes long, bound to the client, the redirect and the PKCE
+/// challenge. Only the code's fingerprint is stored.
+model SandboxAuthorisationCode {
+  id              String    @id @db.Uuid
+  codeFingerprint String    @unique @map("code_fingerprint") @db.VarChar(64)
+  consentId       String    @map("consent_id") @db.Uuid
+  clientId        String    @map("client_id") @db.VarChar(64)
+  redirectUri     String    @map("redirect_uri") @db.VarChar(500)
+  codeChallenge   String    @map("code_challenge") @db.VarChar(128)
+  issuedAt        DateTime  @map("issued_at") @db.Timestamptz(3)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// Null until redeemed; a second redemption is refused.
+  redeemedAt      DateTime? @map("redeemed_at") @db.Timestamptz(3)
+
+  @@index([consentId])
+  @@map("sandbox_bank_authorisation_codes")
+}
+
+/// Access and refresh tokens, by fingerprint. `consent_id` is null for a
+/// client-credentials token, which belongs to no consent.
+model SandboxIssuedToken {
+  id               String            @id @db.Uuid
+  tokenFingerprint String            @unique @map("token_fingerprint") @db.VarChar(64)
+  kind             SandboxTokenKind
+  scope            SandboxTokenScope
+  clientId         String            @map("client_id") @db.VarChar(64)
+  consentId        String?           @map("consent_id") @db.Uuid
+  issuedAt         DateTime          @map("issued_at") @db.Timestamptz(3)
+  expiresAt        DateTime          @map("expires_at") @db.Timestamptz(3)
+  /// Null while usable. Set on rotation and on the consent's revocation.
+  revokedAt        DateTime?         @map("revoked_at") @db.Timestamptz(3)
+
+  @@index([consentId])
+  @@map("sandbox_bank_issued_tokens")
 }

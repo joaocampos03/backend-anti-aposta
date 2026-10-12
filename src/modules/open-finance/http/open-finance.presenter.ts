@@ -1,4 +1,10 @@
 import type { ConnectedAccountsOutput } from '../application/dto/accounts.dto.js';
+import type {
+  ConsentDto,
+  CurrentConsentOutput,
+  RequestConsentOutput,
+  SynchronisationOutput,
+} from '../application/dto/consent.dto.js';
 import type { ListTransactionsOutput } from '../application/dto/ledger.dto.js';
 import type { MonthlySummaryOutput } from '../application/dto/monthly-summary.dto.js';
 import { encodeLedgerCursor } from './open-finance.schemas.js';
@@ -65,6 +71,37 @@ export class OpenFinancePresenter {
         kind: item.kind,
       })),
       nextCursor: output.nextCursor,
+    };
+  }
+
+  static consent(consent: ConsentDto): unknown {
+    return {
+      id: consent.id,
+      status: consent.status,
+      syncStatus: consent.syncStatus,
+      createdAt: consent.createdAt,
+      expiresAt: consent.expiresAt,
+      lastSyncedAt: consent.lastSyncedAt,
+    };
+  }
+
+  static requestedConsent(output: RequestConsentOutput): unknown {
+    return {
+      consent: OpenFinancePresenter.consent(output.consent),
+      authorisationUrl: output.authorisationUrl,
+    };
+  }
+
+  static synchronisation(output: SynchronisationOutput): unknown {
+    return {
+      consent: OpenFinancePresenter.consent(output.consent),
+      ingestedCount: output.ingestedCount,
+    };
+  }
+
+  static currentConsent(output: CurrentConsentOutput): unknown {
+    return {
+      consent: output.consent === null ? null : OpenFinancePresenter.consent(output.consent),
     };
   }
 }

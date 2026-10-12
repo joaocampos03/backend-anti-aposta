@@ -8,6 +8,7 @@ export class ConnectedAccountMapper {
     return ConnectedAccount.restore(UniqueEntityId.restore(row.id), {
       userId: UniqueEntityId.restore(row.userId),
       consentId: UniqueEntityId.restore(row.consentId),
+      externalId: row.externalId,
       institution: row.institution,
       shortName: row.shortName,
       product: row.product,
@@ -22,6 +23,7 @@ export class ConnectedAccountMapper {
       id: account.id.value,
       userId: account.userId.value,
       consentId: account.consentId.value,
+      externalId: account.externalId,
       institution: account.institution,
       shortName: account.shortName,
       product: account.product,

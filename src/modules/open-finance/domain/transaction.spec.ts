@@ -13,6 +13,7 @@ const NOW = new Date('2026-10-11T15:00:00.000Z');
 function aConsent(status: ConsentStatus = 'AUTHORISED'): Consent {
   return Consent.restore(UniqueEntityId.restore('0192f3c1-7a1b-7c3e-9f20-00000000c0de'), {
     userId: USER_ID,
+    externalConsentId: 'urn:sandbox-bank:consent',
     status,
     createdAt: NOW,
     expiresAt: new Date('2027-04-11T15:00:00.000Z'),
@@ -25,6 +26,7 @@ function ingest(consent: Consent, amountInCents = -50000) {
     id: TRANSACTION_ID,
     consent,
     accountId: ACCOUNT_ID,
+    externalId: 'entry-1',
     occurredAt: NOW,
     amount: Money.restore(amountInCents),
     counterparty: Counterparty.restore('Bet365'),
@@ -81,6 +83,7 @@ describe('Transaction', () => {
       id: TRANSACTION_ID,
       consent: aConsent(),
       accountId: ACCOUNT_ID,
+      externalId: 'entry-2',
       occurredAt: NOW,
       amount: Money.restore(-18740),
       counterparty: Counterparty.restore('Mercado'),

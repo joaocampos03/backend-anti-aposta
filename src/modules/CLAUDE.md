@@ -7,10 +7,10 @@
 | `identity`      | **Implemented**: `User`, `Session`, `Credential`, `RegistrationConsent`, `SignInThrottle`, `PasswordResetToken` — registration, sign-in, sign-out, session resolution and password reset. Recovery *requests* wait on a mail decision. |
 | `gamification`  | Bootstrap only: `Streak` at zero days and an empty `BadgeCollection` on `UserRegistered`. No scoring, no awarding yet. |
 | `notifications` | Bootstrap only: the empty `Inbox`. Nothing is pushed, and there is no SSE endpoint yet.      |
-| `open-finance`  | **Implemented**: `Consent`, `ConnectedAccount`, `Transaction`; the statement and the charts as read models; local ingestion. The OAuth flow against a real DataHolder arrives with the Open Finance feature. |
+| `open-finance`  | **Implemented**: `Consent`, `AuthorisationRequest`, `ConnectedAccount`, `Transaction`; the OAuth 2.0 + PKCE client against the DataHolder, synchronisation over HTTP, revocation; the statement and the charts as read models. |
 | `bet-detection` | **Implemented**: the three-policy chain, `Bookmaker`, `TransactionClassification` and the correction. The only context that may read a raw statement line. |
 | `awareness`     | **Implemented**: `YieldEquivalent` (the compound-interest service and the rate) and `SupportOffer`. Nudges arrive with their own feature. |
-| `sandbox-bank`  | Not created. A new context is a decision, not a new folder. |
+| `sandbox-bank`  | **Implemented**: the simulated DataHolder — `BankAccount`, `LedgerEntry`, its own `Consent`, `AuthorisationCode`, `IssuedToken`; the Open Finance surface under `/sandbox`. A foreign system: nothing imports it. |
 
 ## The rules that get broken most
 
@@ -19,10 +19,16 @@
 2. **No foreign keys across contexts.** `gamification_streaks.user_id` is a raw `uuid` with no
    relation to `identity_users`. Cascade deletion across contexts is a use case with tests, not a
    database trigger.
-3. **Events, not calls.** A direct call is acceptable only for a synchronous query the caller cannot
-   proceed without — today that is exactly one: `identity` asking `open-finance` for
-   `hasAuthorisedConsent`, through `identity`'s own port and an adapter that is the
-   anti-corruption layer.
+3. **Events, not calls.** A direct call is acceptable only where an event cannot do the job — today
+   there are exactly two, each through the caller's own port and an adapter that is the
+   anti-corruption layer:
+   - `identity` asking `open-finance` for `hasAuthorisedConsent`, a synchronous query it cannot
+     proceed without;
+   - `open-finance` handing each ingested transaction to `bet-detection.ClassifyTransaction` with
+     the raw statement line, which must never ride on the bus.
+
+   `sandbox-bank` is not an exception to anything: no module calls it. `open-finance` reaches it
+   over HTTP.
 4. **Idempotent subscribers.** The same event delivered twice produces the same state. Every
    bootstrap use case checks for the aggregate before creating it, and has a test that says so.
 
@@ -39,7 +45,13 @@ identity.SignIn        -> UserSignedIn    { userId, sessionId, signedInAt }
 identity.SignOut       -> UserSignedOut   { userId, sessionId, signedOutAt }
 identity.ResetPassword -> PasswordChanged { userId, changedAt }
 
-open-finance.IngestTransactions
+sandbox-bank  --HTTP (OAuth 2.0 + PKCE, Open Finance Brasil)-->  open-finance
+
+open-finance.CompleteAuthorisation
+  -> ConsentAuthorised { userId, consentId, authorisedAt }   # audit; no subscriber
+
+open-finance.CompleteAuthorisation / SynchroniseConsent      # StatementSynchronisation
+  -> bet-detection.ClassifyTransaction (direct call, per new transaction, with the raw line)
   -> TransactionsIngested { userId, transactionIds, ingestedAt }
 
 bet-detection.ClassifyTransaction
@@ -50,9 +62,9 @@ bet-detection.ReclassifyTransaction / RevertReclassification
   -> BetClassificationOverridden { userId, transactionId, verdict }
        -> open-finance.ProjectClassification     # the correction reaches every figure
 
-open-finance.Consent.revoke
+open-finance.RevokeConsent
   -> ConsentRevoked { userId, consentId, revokedAt }
-       -> open-finance.PurgeUserFinancialData    # transactions and accounts
+       -> open-finance.PurgeUserFinancialData    # transactions, accounts, bank tokens, pending authorisations
        -> bet-detection.ForgetUserClassifications # verdicts and the raw lines
 ```
 

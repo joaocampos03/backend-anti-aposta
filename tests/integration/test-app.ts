@@ -1,8 +1,16 @@
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { Express } from 'express';
 import { createApp } from '@src/app.js';
-import { buildContainer, type ContainerSettings } from '@src/container.js';
+import {
+  buildContainer,
+  type ContainerSettings,
+  type OpenFinanceSettings,
+  type SandboxBankSettings,
+} from '@src/container.js';
 import { logger } from '@shared/infrastructure/logger.js';
 import { prisma } from '@shared/infrastructure/prisma.js';
+import { INTEGRATION_ENVIRONMENT } from './environment.js';
 
 const DEFAULT_SETTINGS: ContainerSettings = {
   consentPolicyVersion: '2026-10-01',
@@ -14,7 +22,47 @@ const DEFAULT_SETTINGS: ContainerSettings = {
   signInAttemptsPerQuarterHour: 10_000,
   passwordResetAttemptsPerHour: 10_000,
   classificationOverridesPerHour: 10_000,
+  consentCommandsPerHour: 10_000,
+  sandboxLedgerEntriesPerHour: 10_000,
 };
+
+export const TEST_CLIENT = {
+  clientId: 'anti-aposta',
+  displayName: 'anti-aposta',
+  redirectUri: 'http://localhost:3000/api/open-finance/callback',
+} as const;
+
+const CLIENT_SECRET = INTEGRATION_ENVIRONMENT['OPEN_FINANCE_CLIENT_SECRET'] ?? '';
+
+/**
+ * Nothing listens here: a test that only drives `/api/v1` never reaches the
+ * DataHolder, and one that does uses `startTestServer`, which points this at
+ * itself.
+ */
+const UNREACHABLE_DATA_HOLDER = 'http://127.0.0.1:9/sandbox/open-finance/v2';
+
+export const TEST_OPEN_FINANCE: OpenFinanceSettings = {
+  tokenEncryptionKey: INTEGRATION_ENVIRONMENT['OPEN_FINANCE_TOKEN_KEY'] ?? '',
+  dataHolder: {
+    baseUrl: UNREACHABLE_DATA_HOLDER,
+    authorisationScreenUrl: 'http://localhost:3000/sandbox/authorize',
+    clientId: TEST_CLIENT.clientId,
+    clientSecret: CLIENT_SECRET,
+    redirectUri: TEST_CLIENT.redirectUri,
+  },
+};
+
+const TEST_SANDBOX_BANK: SandboxBankSettings = {
+  client: TEST_CLIENT,
+  clientSecret: CLIENT_SECRET,
+  ledgerWritesEnabled: true,
+};
+
+export interface TestAppOptions {
+  readonly trustProxy?: string | false;
+  readonly dataHolderBaseUrl?: string;
+  readonly ledgerWritesEnabled?: boolean;
+}
 
 /**
  * The real app: real middleware, real error funnel, real Postgres. A test that
@@ -22,7 +70,7 @@ const DEFAULT_SETTINGS: ContainerSettings = {
  */
 export function createTestApp(
   settings: Partial<ContainerSettings> = {},
-  options: { readonly trustProxy?: string | false } = {},
+  options: TestAppOptions = {},
 ): Express {
   return createApp(
     buildContainer({
@@ -32,8 +80,61 @@ export function createTestApp(
       // Supertest connects over loopback, exactly as the Next.js server does locally.
       trustProxy: options.trustProxy ?? 'loopback',
       settings: { ...DEFAULT_SETTINGS, ...settings },
+      openFinance: {
+        ...TEST_OPEN_FINANCE,
+        dataHolder: {
+          ...TEST_OPEN_FINANCE.dataHolder,
+          baseUrl: options.dataHolderBaseUrl ?? UNREACHABLE_DATA_HOLDER,
+        },
+      },
+      sandboxBank: {
+        ...TEST_SANDBOX_BANK,
+        ledgerWritesEnabled: options.ledgerWritesEnabled ?? TEST_SANDBOX_BANK.ledgerWritesEnabled,
+      },
     }),
   );
+}
+
+export interface RunningTestServer {
+  readonly server: Server;
+  readonly baseUrl: string;
+  close(): Promise<void>;
+}
+
+/**
+ * The app listening on a real port, with `open-finance` pointed at its own
+ * sandbox over HTTP — the same round trip production makes, through the
+ * network stack rather than a function call.
+ */
+export async function startTestServer(): Promise<RunningTestServer> {
+  const server = createServer();
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, '127.0.0.1', resolve);
+  });
+
+  const { port } = server.address() as AddressInfo;
+  const baseUrl = `http://127.0.0.1:${String(port)}`;
+  const app = createTestApp({}, { dataHolderBaseUrl: `${baseUrl}/sandbox/open-finance/v2` });
+  server.on('request', app);
+
+  return {
+    server,
+    baseUrl,
+    close: async () => {
+      await new Promise<void>((resolve, reject) => {
+        server.close((cause) => {
+          if (cause === undefined) {
+            resolve();
+
+            return;
+          }
+
+          reject(cause);
+        });
+      });
+    },
+  };
 }
 
 export const VALID_REGISTRATION = {

@@ -35,6 +35,23 @@ export class PrismaTransactionRepository implements TransactionRepository {
     return row === null ? null : TransactionMapper.toDomain(row);
   }
 
+  async findIngestedExternalIds(
+    accountId: UniqueEntityId,
+    candidates: readonly string[],
+  ): Promise<ReadonlySet<string>> {
+    if (candidates.length === 0) {
+      return new Set();
+    }
+
+    // Served by the unique index on (account_id, external_id).
+    const rows = await this.client.transaction.findMany({
+      where: { accountId: accountId.value, externalId: { in: [...candidates] } },
+      select: { externalId: true },
+    });
+
+    return new Set(rows.map((row) => row.externalId));
+  }
+
   async markOverride(transactionId: UniqueEntityId, overriddenAt: Date | null): Promise<void> {
     await this.client.transaction.update({
       where: { id: transactionId.value },

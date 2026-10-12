@@ -11,7 +11,7 @@ import {
   registerCaller,
   type SeededTransaction,
 } from './ledger-fixture.js';
-import { createTestApp } from './test-app.js';
+import { createTestApp, TEST_OPEN_FINANCE } from './test-app.js';
 
 const LEDGER_PATH = '/api/v1/transactions';
 
@@ -333,10 +333,23 @@ describe('GET /api/v1/transactions', () => {
       );
 
       const bus = new InProcessEventBus(logger);
-      const purge = new PurgeUserFinancialData(
-        new PrismaTransactionRepository(prisma, () => new Date()),
-        new PrismaConnectedAccountRepository(prisma),
+      const { PrismaConsentTokenVault } = await import(
+        '@modules/open-finance/infrastructure/prisma-consent-token-vault.js'
       );
+      const { PrismaAuthorisationRequestRepository } = await import(
+        '@modules/open-finance/infrastructure/prisma-authorisation-request.repository.js'
+      );
+      const { AesGcmTokenCipher } = await import(
+        '@modules/open-finance/infrastructure/aes-gcm-token-cipher.js'
+      );
+      const cipher = new AesGcmTokenCipher(TEST_OPEN_FINANCE.tokenEncryptionKey);
+
+      const purge = new PurgeUserFinancialData({
+        transactions: new PrismaTransactionRepository(prisma, () => new Date()),
+        accounts: new PrismaConnectedAccountRepository(prisma),
+        tokens: new PrismaConsentTokenVault(prisma, cipher),
+        authorisationRequests: new PrismaAuthorisationRequestRepository(prisma, cipher),
+      });
       const forget = new ForgetUserClassifications(
         new PrismaTransactionClassificationRepository(prisma),
       );

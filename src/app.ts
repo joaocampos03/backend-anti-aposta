@@ -24,8 +24,17 @@ import {
   openFinanceRoutes,
   type OpenFinanceRouteDependencies,
 } from '@modules/open-finance/http/open-finance.routes.js';
+import {
+  sandboxBankRoutes,
+  type SandboxBankRouteDependencies,
+} from '@modules/sandbox-bank/http/sandbox-bank.routes.js';
 
 const API_PREFIX = '/api/v1';
+/**
+ * The simulated institution lives outside `/api/v1`: it is another system with
+ * its own versioning (`/open-finance/v2`), which happens to share this process.
+ */
+const SANDBOX_PREFIX = '/sandbox';
 const JSON_BODY_LIMIT = '100kb';
 
 export interface AppDependencies {
@@ -41,6 +50,7 @@ export interface AppDependencies {
   readonly openFinance: OpenFinanceRouteDependencies;
   readonly betDetection: BetDetectionRouteDependencies;
   readonly awareness: AwarenessRouteDependencies;
+  readonly sandboxBank: SandboxBankRouteDependencies;
 }
 
 /** Middleware order is part of the contract, and the funnel is always last. */
@@ -61,6 +71,7 @@ export function createApp(dependencies: AppDependencies): Express {
   app.use(API_PREFIX, openFinanceRoutes(dependencies.openFinance));
   app.use(API_PREFIX, betDetectionRoutes(dependencies.betDetection));
   app.use(API_PREFIX, awarenessRoutes(dependencies.awareness));
+  app.use(SANDBOX_PREFIX, sandboxBankRoutes(dependencies.sandboxBank));
 
   app.use(notFound);
   app.use(errorHandler(dependencies.logger));

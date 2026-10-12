@@ -37,6 +37,11 @@ export interface BetMark {
 interface TransactionProperties {
   readonly userId: UniqueEntityId;
   readonly accountId: UniqueEntityId;
+  /**
+   * The DataHolder's id for the movement. Unique per account, which is what
+   * makes synchronising the same statement twice ingest nothing the second time.
+   */
+  readonly externalId: string;
   readonly occurredAt: Date;
   readonly amount: Money;
   readonly counterparty: Counterparty;
@@ -71,6 +76,7 @@ export class Transaction extends AggregateRoot {
     readonly id: UniqueEntityId;
     readonly consent: Consent;
     readonly accountId: UniqueEntityId;
+    readonly externalId: string;
     readonly occurredAt: Date;
     readonly amount: Money;
     readonly counterparty: Counterparty;
@@ -89,6 +95,7 @@ export class Transaction extends AggregateRoot {
       new Transaction(input.id, {
         userId: input.consent.userId,
         accountId: input.accountId,
+        externalId: input.externalId,
         occurredAt: input.occurredAt,
         amount: input.amount,
         counterparty: input.counterparty,
@@ -110,6 +117,10 @@ export class Transaction extends AggregateRoot {
 
   get accountId(): UniqueEntityId {
     return this.properties.accountId;
+  }
+
+  get externalId(): string {
+    return this.properties.externalId;
   }
 
   get occurredAt(): Date {

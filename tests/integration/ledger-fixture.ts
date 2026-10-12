@@ -31,7 +31,10 @@ export interface SeededSignals {
   readonly description?: string;
 }
 
-export type SeededTransaction = IngestedTransaction & SeededSignals;
+/** The DataHolder's id is generated when a test does not care which it is. */
+export type SeededTransaction = Omit<IngestedTransaction, 'externalId'> & {
+  readonly externalId?: string;
+} & SeededSignals;
 
 export interface LedgerFixture {
   readonly userId: string;
@@ -86,6 +89,7 @@ export async function authoriseConsent(
     data: {
       id: consentId,
       userId,
+      externalConsentId: `urn:sandbox-bank:${consentId}`,
       status: 'AUTHORISED',
       createdAt: new Date(now.getTime() - 365 * MILLISECONDS_IN_A_DAY),
       expiresAt: new Date(now.getTime() + 180 * MILLISECONDS_IN_A_DAY),
@@ -102,6 +106,7 @@ export async function authoriseConsent(
         id: checkingId,
         userId,
         consentId,
+        externalId: `bank-${checkingId}`,
         institution: 'Banco Andorinha',
         shortName: 'Andorinha',
         product: 'Conta corrente',
@@ -113,6 +118,7 @@ export async function authoriseConsent(
         id: cardId,
         userId,
         consentId,
+        externalId: `bank-${cardId}`,
         institution: 'Vela Crédito',
         shortName: 'Vela',
         product: 'Cartão de crédito',
@@ -160,7 +166,10 @@ export async function ingestAndClassify(
     idGenerator,
     clock,
     events: eventBus,
-  }).execute({ userId, transactions: rows });
+  }).execute({
+    userId,
+    transactions: rows.map((row) => ({ ...row, externalId: row.externalId ?? randomUUID() })),
+  });
 
   if (!ingested.ok) {
     throw new Error(`ingestion refused: ${ingested.error.code}`);

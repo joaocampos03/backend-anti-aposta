@@ -42,12 +42,51 @@ const environmentSchema = z.object({
   PASSWORD_RESET_ATTEMPTS_PER_HOUR: z.coerce.number().int().positive().default(10),
   /** So a script cannot rewrite a betting history through the override endpoint. */
   CLASSIFICATION_OVERRIDES_PER_HOUR: z.coerce.number().int().positive().default(30),
+  /** Starting, completing and synchronising a consent: each one calls the DataHolder. */
+  CONSENT_COMMANDS_PER_HOUR: z.coerce.number().int().positive().default(60),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
+
+  // -------------------------------------------------------------------------
+  // Open Finance: this platform as the DataRecipient
+  // -------------------------------------------------------------------------
+  /**
+   * AES-256-GCM key for the DataHolder's tokens and the PKCE verifier at rest:
+   * 32 random bytes, base64. `openssl rand -base64 32`.
+   */
+  OPEN_FINANCE_TOKEN_KEY: z
+    .string()
+    .refine((value) => Buffer.from(value, 'base64').length === 32, {
+      message: 'must be 32 bytes, base64-encoded',
+    }),
+  OPEN_FINANCE_CLIENT_ID: z.string().min(1).default('anti-aposta'),
+  OPEN_FINANCE_CLIENT_SECRET: z.string().min(16),
+  /** The frontend route that receives the DataHolder's redirect and relays it here. */
+  OPEN_FINANCE_REDIRECT_URI: z.url().default('http://localhost:3000/api/open-finance/callback'),
+
+  // -------------------------------------------------------------------------
+  // sandbox-bank: the simulated DataHolder, reached over HTTP like any other
+  // -------------------------------------------------------------------------
+  /** Where `open-finance` reaches the sandbox's Open Finance surface. */
+  SANDBOX_BANK_BASE_URL: z.url().default('http://localhost:3333/sandbox/open-finance/v2'),
+  /** The bank's authorisation screen, rendered by the frontend. */
+  SANDBOX_BANK_AUTHORISATION_URL: z.url().default('http://localhost:3000/sandbox/authorize'),
+  /**
+   * Whether a person may book entries at the sandbox. Never in production,
+   * whatever this says: a fabricated movement must not be able to reach a real
+   * person's statement.
+   */
+  SANDBOX_BANK_LEDGER_WRITES: z.enum(['enabled', 'disabled']).default('enabled'),
+  SANDBOX_BANK_LEDGER_ENTRIES_PER_HOUR: z.coerce.number().int().positive().default(120),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;
+
+/** The one switch whose answer depends on two variables. */
+export function sandboxLedgerWritesEnabled(environment: Environment): boolean {
+  return environment.NODE_ENV !== 'production' && environment.SANDBOX_BANK_LEDGER_WRITES === 'enabled';
+}
 
 function readEnvironment(): Environment {
   const parsed = environmentSchema.safeParse(process.env);

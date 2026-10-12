@@ -6,6 +6,8 @@ import type { AccountKind } from './transaction-attributes.js';
 interface ConnectedAccountProperties {
   readonly userId: UniqueEntityId;
   readonly consentId: UniqueEntityId;
+  /** The DataHolder's id for this account, which a statement is requested by. */
+  readonly externalId: string;
   readonly institution: string;
   /** A short institution name for a row that already carries a merchant name. */
   readonly shortName: string;
@@ -49,6 +51,10 @@ export class ConnectedAccount extends AggregateRoot {
 
   get consentId(): UniqueEntityId {
     return this.properties.consentId;
+  }
+
+  get externalId(): string {
+    return this.properties.externalId;
   }
 
   get institution(): string {

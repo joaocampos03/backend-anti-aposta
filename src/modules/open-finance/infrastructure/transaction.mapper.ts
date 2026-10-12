@@ -9,6 +9,7 @@ export class TransactionMapper {
     return Transaction.restore(UniqueEntityId.restore(row.id), {
       userId: UniqueEntityId.restore(row.userId),
       accountId: UniqueEntityId.restore(row.accountId),
+      externalId: row.externalId,
       occurredAt: row.occurredAt,
       amount: Money.restore(row.amountInCents),
       counterparty: Counterparty.restore(row.counterparty),
@@ -33,6 +34,7 @@ export class TransactionMapper {
       id: transaction.id.value,
       userId: transaction.userId.value,
       accountId: transaction.accountId.value,
+      externalId: transaction.externalId,
       occurredAt: transaction.occurredAt,
       amountInCents: transaction.amount.amountInCents,
       counterparty: transaction.counterparty.value,

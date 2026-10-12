@@ -6,6 +6,7 @@ export class ConsentMapper {
   static toDomain(row: ConsentRow): Consent {
     return Consent.restore(UniqueEntityId.restore(row.id), {
       userId: UniqueEntityId.restore(row.userId),
+      externalConsentId: row.externalConsentId,
       status: row.status,
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
@@ -17,6 +18,7 @@ export class ConsentMapper {
     return {
       id: consent.id.value,
       userId: consent.userId.value,
+      externalConsentId: consent.externalConsentId,
       status: consent.status,
       createdAt: consent.createdAt,
       expiresAt: consent.expiresAt,

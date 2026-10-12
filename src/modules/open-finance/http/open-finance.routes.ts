@@ -8,6 +8,10 @@ export interface OpenFinanceRouteDependencies {
   readonly requireSession: RequestHandler;
   readonly validateListTransactionsQuery: RequestHandler;
   readonly validateMonthlySummaryQuery: RequestHandler;
+  readonly validateConsentParams: RequestHandler;
+  readonly validateAuthorisationCallback: RequestHandler;
+  /** Each of these calls the DataHolder, so a script cannot hammer it through us. */
+  readonly consentCommandRateLimits: readonly RequestHandler[];
 }
 
 /** One route, one use case. Every one of them is scoped to the caller. */
@@ -37,5 +41,56 @@ export function openFinanceRoutes(dependencies: OpenFinanceRouteDependencies): R
     dependencies.controller.listAccounts,
   );
 
+  consentRoutes(router, dependencies);
+
   return router;
+}
+
+/**
+ * The consent lifecycle. Commands that are not CRUD are sub-resources —
+ * `.../authorisation`, `.../synchronisation`, `.../revocation` — never verbs.
+ */
+function consentRoutes(router: Router, dependencies: OpenFinanceRouteDependencies): void {
+  router.get(
+    '/consents/current',
+    internalErrorMessage(OPEN_FINANCE_MESSAGES.consentUnavailable),
+    dependencies.requireSession,
+    dependencies.controller.currentConsent,
+  );
+
+  router.post(
+    '/consents',
+    internalErrorMessage(OPEN_FINANCE_MESSAGES.connectionUnavailable),
+    dependencies.requireSession,
+    ...dependencies.consentCommandRateLimits,
+    dependencies.controller.requestConsent,
+  );
+
+  router.post(
+    '/consents/:consentId/authorisation',
+    internalErrorMessage(OPEN_FINANCE_MESSAGES.connectionUnavailable),
+    dependencies.requireSession,
+    ...dependencies.consentCommandRateLimits,
+    dependencies.validateConsentParams,
+    dependencies.validateAuthorisationCallback,
+    dependencies.controller.completeAuthorisation,
+  );
+
+  router.post(
+    '/consents/:consentId/synchronisation',
+    internalErrorMessage(OPEN_FINANCE_MESSAGES.synchronisationUnavailable),
+    dependencies.requireSession,
+    ...dependencies.consentCommandRateLimits,
+    dependencies.validateConsentParams,
+    dependencies.controller.synchronise,
+  );
+
+  // No rate limit, on purpose: withdrawing consent must always be possible.
+  router.post(
+    '/consents/:consentId/revocation',
+    internalErrorMessage(OPEN_FINANCE_MESSAGES.revocationUnavailable),
+    dependencies.requireSession,
+    dependencies.validateConsentParams,
+    dependencies.controller.revoke,
+  );
 }

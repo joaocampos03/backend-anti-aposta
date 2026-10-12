@@ -68,9 +68,51 @@ re-reads the owning context rather than trusting a payload.
 If `bet-detection` adds a policy, the `BetMarkReason` union here fails to compile. That is the
 point at which somebody decides what the statement should show for it.
 
-## Still missing
+## Connecting an institution
 
-The OAuth flow against a DataHolder, the `sandbox-bank` context, and the HTTP ingestion that
-`IngestTransactions` is waiting behind — it has no route today and is called by the seed and by the
-integration fixture. Revocation has a use case and a subscriber but no endpoint: nothing emits
-`ConsentRevoked` outside a test.
+This context is the OAuth client. The DataHolder today is `sandbox-bank`, reached **only over
+HTTP** through `SandboxBankDataHolder` and `open-finance-brasil.wire.ts` — the anti-corruption
+layer. Every field name of the specification is spelled in those two files and nowhere else.
+
+| Step | Endpoint | Use case |
+| --- | --- | --- |
+| Start | `POST /api/v1/consents` | `RequestConsent`: registers at the bank, keeps `state` + PKCE verifier, answers the authorisation URL |
+| Callback | `POST /api/v1/consents/{id}/authorisation` | `CompleteAuthorisation`: checks `state`, exchanges the code, authorises, first sync |
+| Refresh | `POST /api/v1/consents/{id}/synchronisation` | `SynchroniseConsent`: refreshes the token if needed, ingests what is new |
+| Withdraw | `POST /api/v1/consents/{id}/revocation` | `RevokeConsent`: `ConsentRevoked` → purge; then tells the bank, best effort |
+| Read | `GET /api/v1/consents/current` | `GetCurrentConsent` |
+
+- **One authorised consent at a time.** A second `POST /consents` answers `409
+  CONSENT_ALREADY_AUTHORISED`.
+- **A `state` mismatch records nothing**, not even the attempt: the authorisation request stays
+  pending and nothing is exchanged.
+- **Tokens and the PKCE verifier are AES-256-GCM encrypted at rest** (`AesGcmTokenCipher`, key from
+  `OPEN_FINANCE_TOKEN_KEY`), decrypted only in `infrastructure/`.
+- **Revocation does not wait for the bank.** The purge runs first; the bank is told after, and its
+  failure does not undo the person's withdrawal. Revocation is deliberately not rate limited.
+- A consent lasts **180 days** (`CONSENT_LIFETIME_IN_DAYS`), an assumed default under the
+  specification's twelve-month cap.
+
+## Synchronisation
+
+`StatementSynchronisation` pulls the shared accounts, then each statement over twelve months back
+and a month forward, and ingests only DataHolder ids not already on that account (unique on
+`(account_id, external_id)`). Synchronising twice ingests nothing the second time, which is why the
+endpoint needs no `Idempotency-Key`.
+
+Each new transaction goes through `Transaction.ingest` (the consent gate), then is handed to
+`bet-detection.ClassifyTransaction` **by direct call** through the `TransactionClassifier` port.
+That is the second sanctioned direct call between contexts: the statement line and the counterparty
+document must not travel on the bus, whose payloads are ids only. They pass through this context's
+memory and are never stored here.
+
+**The category is inferred** (`category-inference.ts`): the specification sends none. An MCC we
+know names it; otherwise a credit is `INCOME`, a PIX or transfer is `TRANSFER`, anything else
+`OTHER`. It never infers `BETS` — whether a movement is a bet is the classification's call, and
+every figure already follows the classification. The table is an assumed default.
+
+Not handled: an entry booked as `LANCAMENTO_FUTURO` that later settles is not re-read, because the
+sandbox never settles one. A real DataHolder would need `Transaction.settle` wired in here.
+
+`IngestTransactions` remains for the integration fixtures, which arrange a statement without running
+the OAuth flow for every test. It is not the product's ingestion path.

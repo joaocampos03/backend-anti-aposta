@@ -3,7 +3,11 @@
  * envelope. `code` is the stable contract the frontend switches on; `message` is
  * the Portuguese sentence a person reads, factual and never moralising.
  */
-export type HttpFailureStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
+/**
+ * `502` is for an upstream that failed us — the Open Finance DataHolder — so
+ * the client can tell "they are down" from "we broke".
+ */
+export type HttpFailureStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 502;
 
 /**
  * Keyed by field name when the failure belongs to a field. A number is allowed

@@ -99,6 +99,7 @@ describe('POST /api/v1/identity/sessions', () => {
       data: {
         id: '0192f3c1-7a1b-7c3e-9f20-0000000000aa',
         userId,
+        externalConsentId: 'urn:sandbox-bank:0192f3c1-7a1b-7c3e-9f20-0000000000aa',
         status: 'AUTHORISED',
         createdAt: new Date(),
         expiresAt: new Date(Date.now() + 86_400_000),

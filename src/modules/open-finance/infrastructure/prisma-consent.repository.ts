@@ -13,6 +13,17 @@ export class PrismaConsentRepository implements ConsentRepository {
     await this.client.consent.upsert({ where: { id: row.id }, create: row, update: row });
   }
 
+  async findByIdAndUserId(
+    consentId: UniqueEntityId,
+    userId: UniqueEntityId,
+  ): Promise<Consent | null> {
+    const row = await this.client.consent.findFirst({
+      where: { id: consentId.value, userId: userId.value },
+    });
+
+    return row === null ? null : ConsentMapper.toDomain(row);
+  }
+
   async findAuthorisedByUserId(userId: UniqueEntityId, moment: Date): Promise<Consent | null> {
     const row = await this.client.consent.findFirst({
       where: { userId: userId.value, status: 'AUTHORISED', expiresAt: { gt: moment } },
