@@ -18,12 +18,17 @@ const DEFAULT_SETTINGS: ContainerSettings = {
  * The real app: real middleware, real error funnel, real Postgres. A test that
  * stubs the middleware proves nothing about the endpoint.
  */
-export function createTestApp(settings: Partial<ContainerSettings> = {}): Express {
+export function createTestApp(
+  settings: Partial<ContainerSettings> = {},
+  options: { readonly trustProxy?: string | false } = {},
+): Express {
   return createApp(
     buildContainer({
       prisma,
       logger,
       frontendOrigin: 'http://localhost:3000',
+      // Supertest connects over loopback, exactly as the Next.js server does locally.
+      trustProxy: options.trustProxy ?? 'loopback',
       settings: { ...DEFAULT_SETTINGS, ...settings },
     }),
   );

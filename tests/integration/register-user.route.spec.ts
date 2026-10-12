@@ -203,6 +203,36 @@ describe('POST /api/v1/identity/users', () => {
     expect(response.headers['retry-after']).toBe('3600');
   });
 
+  it('keeps a separate quota per client behind the trusted Next.js server', async () => {
+    const app = createTestApp({ registrationAttemptsPerHour: 1 });
+
+    await request(app)
+      .post(REGISTER_PATH)
+      .set('X-Forwarded-For', '203.0.113.10')
+      .send(VALID_REGISTRATION);
+    const response = await request(app)
+      .post(REGISTER_PATH)
+      .set('X-Forwarded-For', '203.0.113.20')
+      .send({ ...VALID_REGISTRATION, email: 'bruno@exemplo.com' });
+
+    expect(response.status).toBe(201);
+  });
+
+  it('ignores X-Forwarded-For from a caller it does not trust', async () => {
+    const app = createTestApp({ registrationAttemptsPerHour: 1 }, { trustProxy: false });
+
+    await request(app)
+      .post(REGISTER_PATH)
+      .set('X-Forwarded-For', '203.0.113.10')
+      .send(VALID_REGISTRATION);
+    const response = await request(app)
+      .post(REGISTER_PATH)
+      .set('X-Forwarded-For', '203.0.113.20')
+      .send({ ...VALID_REGISTRATION, email: 'bruno@exemplo.com' });
+
+    expect(response.status).toBe(429);
+  });
+
   it('bootstraps an empty streak at zero days, an empty badge collection and an inbox', async () => {
     const response = await request(createTestApp()).post(REGISTER_PATH).send(VALID_REGISTRATION);
     const userId: string = response.body.user.id;

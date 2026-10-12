@@ -10,6 +10,7 @@ const app = createApp(
     prisma,
     logger,
     frontendOrigin: env.FRONTEND_ORIGIN,
+    trustProxy: env.TRUST_PROXY,
     settings: {
       consentPolicyVersion: env.REGISTRATION_CONSENT_POLICY_VERSION,
       sessionLifetimeInDays: env.SESSION_TTL_IN_DAYS,
