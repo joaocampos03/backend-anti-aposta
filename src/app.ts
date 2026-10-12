@@ -12,6 +12,18 @@ import {
   identityRoutes,
   type IdentityRouteDependencies,
 } from '@modules/identity/http/identity.routes.js';
+import {
+  awarenessRoutes,
+  type AwarenessRouteDependencies,
+} from '@modules/awareness/http/awareness.routes.js';
+import {
+  betDetectionRoutes,
+  type BetDetectionRouteDependencies,
+} from '@modules/bet-detection/http/bet-detection.routes.js';
+import {
+  openFinanceRoutes,
+  type OpenFinanceRouteDependencies,
+} from '@modules/open-finance/http/open-finance.routes.js';
 
 const API_PREFIX = '/api/v1';
 const JSON_BODY_LIMIT = '100kb';
@@ -26,6 +38,9 @@ export interface AppDependencies {
   readonly trustProxy: string | false;
   readonly health: HealthDependencies;
   readonly identity: IdentityRouteDependencies;
+  readonly openFinance: OpenFinanceRouteDependencies;
+  readonly betDetection: BetDetectionRouteDependencies;
+  readonly awareness: AwarenessRouteDependencies;
 }
 
 /** Middleware order is part of the contract, and the funnel is always last. */
@@ -43,6 +58,9 @@ export function createApp(dependencies: AppDependencies): Express {
 
   app.use(healthRoutes(dependencies.health));
   app.use(API_PREFIX, identityRoutes(dependencies.identity));
+  app.use(API_PREFIX, openFinanceRoutes(dependencies.openFinance));
+  app.use(API_PREFIX, betDetectionRoutes(dependencies.betDetection));
+  app.use(API_PREFIX, awarenessRoutes(dependencies.awareness));
 
   app.use(notFound);
   app.use(errorHandler(dependencies.logger));

@@ -337,6 +337,12 @@ JSON field names and column names — never invent synonyms.
 | Credencial                  | `Credential`      | The `Email` + `PasswordHash` pair; `verify` answers a boolean and never a reason |
 | Token de redefinição        | `PasswordResetToken` | Single-use, 60-minute, stored hashed, bound to one user      |
 | Limite de tentativas        | `SignInThrottle`  | The per-address attempt window. A delay, **never** a lockout — `AccountLock` would be the modelling mistake |
+| Contraparte                 | `Counterparty`    | The normalised merchant or payer name, **derived from** the statement line and never the line itself |
+| Categoria                   | `TransactionCategory` | The closed enum the API sends; the Portuguese label is the frontend's |
+| Totais do recorte           | `LedgerTotals`    | The figures for an entire filtered set, never for a page — naming it after the page is what produces a hero figure that moves as you scroll |
+| Oferta de apoio             | `SupportOffer`    | Whether to surface support resources, and what was counted. Carries no diagnosis |
+| Origem da classificação     | `ClassificationSource` | `POLICY` or `USER_OVERRIDE` |
+| Correção de classificação   | `ClassificationOverride` | One per transaction, outranking the policy chain permanently and reversible by the same person |
 
 Forbidden vocabulary: `data`, `info`, `manager`, `helper`, `util`, `handler` (except Express error
 handlers), `service` as a suffix for what is really a use case, `process`, `do`. Name things after

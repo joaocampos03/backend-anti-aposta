@@ -6,12 +6,14 @@ import { prisma } from '@shared/infrastructure/prisma.js';
 
 const DEFAULT_SETTINGS: ContainerSettings = {
   consentPolicyVersion: '2026-10-01',
+  timeZone: 'America/Sao_Paulo',
   sessionLifetimeInDays: 14,
   sessionRenewWithinDays: 7,
   registrationAttemptsPerHour: 10_000,
   registrationSuccessesPerHour: 10_000,
   signInAttemptsPerQuarterHour: 10_000,
   passwordResetAttemptsPerHour: 10_000,
+  classificationOverridesPerHour: 10_000,
 };
 
 /**

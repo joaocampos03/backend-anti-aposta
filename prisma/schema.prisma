@@ -98,14 +98,173 @@ enum ConsentStatus {
 }
 
 model Consent {
-  id        String        @id @db.Uuid
-  userId    String        @map("user_id") @db.Uuid
-  status    ConsentStatus
-  createdAt DateTime      @map("created_at") @db.Timestamptz(3)
-  expiresAt DateTime      @map("expires_at") @db.Timestamptz(3)
+  id           String             @id @db.Uuid
+  userId       String             @map("user_id") @db.Uuid
+  status       ConsentStatus
+  createdAt    DateTime           @map("created_at") @db.Timestamptz(3)
+  expiresAt    DateTime           @map("expires_at") @db.Timestamptz(3)
+  /// Null until the first ingestion finishes: that is what SYNCING means.
+  lastSyncedAt DateTime?          @map("last_synced_at") @db.Timestamptz(3)
+  accounts     ConnectedAccount[]
 
   @@index([userId, status])
   @@map("open_finance_consents")
+}
+
+enum AccountKind {
+  CHECKING
+  CREDIT_CARD
+
+  @@map("open_finance_account_kind")
+}
+
+enum TransactionCategory {
+  BETS
+  GROCERIES
+  DINING
+  TRANSPORT
+  HOUSING
+  HEALTH
+  SUBSCRIPTIONS
+  SHOPPING
+  INCOME
+  TRANSFER
+  OTHER
+
+  @@map("open_finance_transaction_category")
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  DIRECT_DEBIT
+  TRANSFER
+  BOLETO
+
+  @@map("open_finance_payment_method")
+}
+
+enum TransactionStatus {
+  SETTLED
+  PENDING
+
+  @@map("open_finance_transaction_status")
+}
+
+/// Only the last four digits ever exist here: the full number and the check
+/// digit are dropped at ingestion, so there is nothing to leak.
+model ConnectedAccount {
+  id           String        @id @db.Uuid
+  userId       String        @map("user_id") @db.Uuid
+  consentId    String        @map("consent_id") @db.Uuid
+  institution  String        @db.VarChar(120)
+  shortName    String        @map("short_name") @db.VarChar(60)
+  product      String        @db.VarChar(60)
+  maskedNumber String        @map("masked_number") @db.VarChar(16)
+  kind         AccountKind
+  connectedAt  DateTime      @map("connected_at") @db.Timestamptz(3)
+  consent      Consent       @relation(fields: [consentId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([consentId])
+  @@map("open_finance_connected_accounts")
+}
+
+/// The amount is signed integer cents: negative leaves the account, positive
+/// arrives. There is no `description` column — the raw statement line lives in
+/// `bet-detection`, which is the only context allowed to read it.
+///
+/// The three `bet_*` columns are a **projection** of `bet-detection`'s verdict,
+/// kept current by subscribing to its events. They exist so the statement can
+/// be filtered and totalled in one query instead of joining across contexts.
+model Transaction {
+  id            String              @id @db.Uuid
+  userId        String              @map("user_id") @db.Uuid
+  accountId     String              @map("account_id") @db.Uuid
+  occurredAt    DateTime            @map("occurred_at") @db.Timestamptz(3)
+  amountInCents Int                 @map("amount_in_cents")
+  counterparty  String              @db.VarChar(140)
+  category      TransactionCategory
+  method        PaymentMethod
+  status        TransactionStatus
+  ingestedAt    DateTime            @map("ingested_at") @db.Timestamptz(3)
+  betMatchedBy  DetectionReason?    @map("bet_matched_by")
+  betConfidence DetectionConfidence? @map("bet_confidence")
+  betSource     ClassificationSource? @map("bet_source")
+  overriddenAt  DateTime?           @map("overridden_at") @db.Timestamptz(3)
+  account       ConnectedAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt(sort: Desc), id(sort: Desc)])
+  @@index([userId, accountId])
+  @@map("open_finance_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// bet-detection — classifying transactions as gambling
+// ---------------------------------------------------------------------------
+
+enum DetectionReason {
+  GAMBLING_MCC
+  LICENSED_CNPJ
+  DESCRIPTION_KEYWORD
+
+  @@map("bet_detection_reason")
+}
+
+enum DetectionConfidence {
+  HIGH
+  MEDIUM
+  LOW
+
+  @@map("bet_detection_confidence")
+}
+
+enum ClassificationSource {
+  POLICY
+  USER_OVERRIDE
+
+  @@map("bet_detection_source")
+}
+
+enum OverrideVerdict {
+  NOT_A_BET
+
+  @@map("bet_detection_override_verdict")
+}
+
+/// A betting operator, by registration number. Data rather than code, so a
+/// correction undone tomorrow is judged by tomorrow's registry.
+model Bookmaker {
+  id           String   @id @db.Uuid
+  tradeName    String   @map("trade_name") @db.VarChar(120)
+  document     String   @unique @db.VarChar(14)
+  registeredAt DateTime @map("registered_at") @db.Timestamptz(3)
+
+  @@map("bet_detection_bookmakers")
+}
+
+/// Everything this context knows about one transaction: the signals the
+/// policies may read, the chain's verdict, and the person's correction.
+///
+/// `description` is the raw statement line. It is here and nowhere else: not in
+/// a response, not in an event payload, not in a log line.
+model TransactionClassification {
+  transactionId        String                @id @map("transaction_id") @db.Uuid
+  userId               String                @map("user_id") @db.Uuid
+  mcc                  Int?
+  counterpartyDocument String?               @map("counterparty_document") @db.VarChar(14)
+  description          String                @default("")
+  matchedBy            DetectionReason?      @map("matched_by")
+  confidence           DetectionConfidence?
+  classifiedAt         DateTime              @map("classified_at") @db.Timestamptz(3)
+  overrideVerdict      OverrideVerdict?      @map("override_verdict")
+  overrideReason       String?               @map("override_reason") @db.VarChar(280)
+  overriddenAt         DateTime?             @map("overridden_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("bet_detection_classifications")
 }
 
 // ---------------------------------------------------------------------------

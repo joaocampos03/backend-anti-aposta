@@ -7,8 +7,10 @@
 | `identity`      | **Implemented**: `User`, `Session`, `Credential`, `RegistrationConsent`, `SignInThrottle`, `PasswordResetToken` — registration, sign-in, sign-out, session resolution and password reset. Recovery *requests* wait on a mail decision. |
 | `gamification`  | Bootstrap only: `Streak` at zero days and an empty `BadgeCollection` on `UserRegistered`. No scoring, no awarding yet. |
 | `notifications` | Bootstrap only: the empty `Inbox`. Nothing is pushed, and there is no SSE endpoint yet.      |
-| `open-finance`  | **Read side only**: `AuthorisedConsentQuery` answers "has this user an `AUTHORISED` consent?". The `Consent` aggregate, the OAuth flow and ingestion arrive with the Open Finance feature. |
-| `sandbox-bank`, `bet-detection`, `awareness` | Not created. A new context is a decision, not a new folder. |
+| `open-finance`  | **Implemented**: `Consent`, `ConnectedAccount`, `Transaction`; the statement and the charts as read models; local ingestion. The OAuth flow against a real DataHolder arrives with the Open Finance feature. |
+| `bet-detection` | **Implemented**: the three-policy chain, `Bookmaker`, `TransactionClassification` and the correction. The only context that may read a raw statement line. |
+| `awareness`     | **Implemented**: `YieldEquivalent` (the compound-interest service and the rate) and `SupportOffer`. Nudges arrive with their own feature. |
+| `sandbox-bank`  | Not created. A new context is a decision, not a new folder. |
 
 ## The rules that get broken most
 
@@ -36,7 +38,30 @@ identity.RegisterUser
 identity.SignIn        -> UserSignedIn    { userId, sessionId, signedInAt }
 identity.SignOut       -> UserSignedOut   { userId, sessionId, signedOutAt }
 identity.ResetPassword -> PasswordChanged { userId, changedAt }
+
+open-finance.IngestTransactions
+  -> TransactionsIngested { userId, transactionIds, ingestedAt }
+
+bet-detection.ClassifyTransaction
+  -> BetTransactionDetected { userId, transactionId, matchedBy, confidence }
+       -> open-finance.ProjectClassification     # refresh the copy on the row
+
+bet-detection.ReclassifyTransaction / RevertReclassification
+  -> BetClassificationOverridden { userId, transactionId, verdict }
+       -> open-finance.ProjectClassification     # the correction reaches every figure
+
+open-finance.Consent.revoke
+  -> ConsentRevoked { userId, consentId, revokedAt }
+       -> open-finance.PurgeUserFinancialData    # transactions and accounts
+       -> bet-detection.ForgetUserClassifications # verdicts and the raw lines
 ```
+
+**The projection is the load-bearing part of the statement.** `open-finance`
+keeps a copy of `bet-detection`'s verdict on its own row, so the ledger can
+filter `type=BETS` and total it in one query rather than joining across a
+context boundary. The subscriber **re-reads** the owning context rather than
+trusting the payload — the events carry ids only, which is what stops a
+financial judgement travelling through the bus.
 
 The last three have no subscribers: they are recorded for audit. **Nothing is ever pushed to the
 notification stream for a sign-in** — a "novo acesso" alert belongs to a bank, not to a product
