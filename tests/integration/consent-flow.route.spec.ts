@@ -28,8 +28,11 @@ beforeEach(async () => {
   token = (await registerCaller('ana@exemplo.com')).token;
 });
 
+/** Set by a test that needs a differently wired server; the helpers follow it. */
+let serverOverride: RunningTestServer | null = null;
+
 function api(): request.Agent {
-  return request.agent(running.server);
+  return request.agent((serverOverride ?? running).server);
 }
 
 function asCaller(test: request.Test, bearer = token): request.Test {
@@ -238,7 +241,7 @@ describe('connecting through the sandbox bank', () => {
 });
 
 describe('a movement booked at the bank', () => {
-  it('reaches the statement on the next synchronisation, classified as a bet', async () => {
+  it('reaches the statement as soon as it is booked, through the bank’s notice, classified as a bet', async () => {
     const consentId = await connect();
     const [checking] = await bankAccounts();
 
@@ -255,12 +258,37 @@ describe('a movement booked at the bank', () => {
       api().post(`/api/v1/consents/${consentId}/synchronisation`),
     );
     expect(synchronised.status).toBe(200);
-    expect(synchronised.body.ingestedCount).toBe(1);
+    expect(synchronised.body.ingestedCount).toBe(0);
 
     const bets = await asCaller(api().get('/api/v1/transactions?type=BETS'));
     expect(bets.body.items).toHaveLength(1);
     expect(bets.body.items[0].amount).toEqual({ amountInCents: -5000, currency: 'BRL' });
     expect(bets.body.items[0].bet).toMatchObject({ matchedBy: 'LICENSED_CNPJ' });
+  });
+
+  it('is still booked when the platform cannot be told, and the button reads it', async () => {
+    serverOverride = await startTestServer({ noticeReachable: false });
+
+    try {
+      const consentId = await connect();
+      const [checking] = await bankAccounts();
+
+      const booked = await bookEntry(checking?.id ?? '', {
+        amountInCents: -2590,
+        transactionName: 'SUPERMERCADO',
+        type: 'PIX',
+      });
+      expect(booked.status).toBe(201);
+      expect(await prisma.transaction.count()).toBe(0);
+
+      const synchronised = await asCaller(
+        api().post(`/api/v1/consents/${consentId}/synchronisation`),
+      );
+      expect(synchronised.body.ingestedCount).toBe(1);
+    } finally {
+      await serverOverride.close();
+      serverOverride = null;
+    }
   });
 
   it('is ingested once, however many times the person synchronises', async () => {

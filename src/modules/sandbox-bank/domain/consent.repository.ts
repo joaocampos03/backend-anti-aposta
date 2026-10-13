@@ -6,4 +6,6 @@ export interface ConsentRepository {
   findById(consentId: UniqueEntityId): Promise<Consent | null>;
   /** "Not yours" and "does not exist" are the same answer to a client. */
   findByIdAndClientId(consentId: UniqueEntityId, clientId: string): Promise<Consent | null>;
+  /** Authorised consents whose shared accounts include this one: who to tell when it moves. */
+  findAuthorisedSharingAccount(accountId: UniqueEntityId): Promise<readonly Consent[]>;
 }

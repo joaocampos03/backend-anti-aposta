@@ -35,7 +35,9 @@ export const OPEN_FINANCE_MESSAGES = {
     'Não conseguimos atualizar suas transações agora. Tente novamente em instantes.',
   revocationUnavailable:
     'Não conseguimos revogar o consentimento agora. Tente novamente em instantes.',
-  tooManyConsentCommands: 'Muitas tentativas em pouco tempo. Tente novamente em instantes.',
+  dataHolderNotRecognised: 'Instituição não reconhecida.',
+  dataHolderNoticeInvalid: 'Não conseguimos ler esse aviso da instituição.',
+  tooManyConsentCommands:'Muitas tentativas em pouco tempo. Tente novamente em instantes.',
   checkingAccountProduct: 'Conta corrente',
   creditCardProduct: 'Cartão de crédito',
 } as const;

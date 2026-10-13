@@ -9,6 +9,7 @@ import {
   InMemoryConsentRepository,
   InMemoryIssuedTokenRepository,
   InMemoryLedgerEntryRepository,
+  RecordingDataRecipientNotifier,
 } from '../infrastructure/in-memory/in-memory-sandbox-bank.js';
 import { CUSTOMER_ID, NOW, OTHER_CUSTOMER_ID } from '../testing/sandbox-bank.builders.js';
 import { AccessTokenIntrospection } from './access-token-introspection.js';
@@ -20,6 +21,7 @@ import { DescribeAuthorisationRequest } from './describe-authorisation-request.u
 import { IssueToken } from './issue-token.use-case.js';
 import { ListSharedAccounts } from './list-shared-accounts.use-case.js';
 import { ListSharedTransactions } from './list-shared-transactions.use-case.js';
+import type { RecordLedgerEntryInput } from './dto/bank-app.dto.js';
 import { RecordLedgerEntry } from './record-ledger-entry.use-case.js';
 import { RevokeConsent } from './revoke-consent.use-case.js';
 import { TokenIssuance } from './token-issuance.js';
@@ -28,6 +30,7 @@ const CLIENT = {
   clientId: 'anti-aposta',
   displayName: 'anti-aposta',
   redirectUri: 'http://localhost:3000/api/open-finance/callback',
+  noticeUri: 'http://localhost:3333/api/v1/data-holder-notices',
 };
 const SECRET = 'client-secret';
 const VERIFIER = 'a-verifier-only-the-client-holds';
@@ -41,6 +44,7 @@ let ledger: InMemoryLedgerEntryRepository;
 let consents: InMemoryConsentRepository;
 let codes: InMemoryAuthorisationCodeRepository;
 let tokens: InMemoryIssuedTokenRepository;
+let notifier: RecordingDataRecipientNotifier;
 let issueToken: IssueToken;
 let describeRequest: DescribeAuthorisationRequest;
 let decide: DecideAuthorisation;
@@ -54,6 +58,7 @@ beforeEach(() => {
   consents = new InMemoryConsentRepository();
   codes = new InMemoryAuthorisationCodeRepository();
   tokens = new InMemoryIssuedTokenRepository();
+  notifier = new RecordingDataRecipientNotifier();
 
   const idGenerator = new SequentialIdGenerator();
   const clients = new InMemoryClientRegistry(CLIENT, SECRET);
@@ -127,6 +132,31 @@ function exchange(code: string, verifier = VERIFIER) {
     codeVerifier: verifier,
     refreshToken: null,
   });
+}
+
+/** A PIX to a bookmaker on the given account, booked by the customer. */
+function book(accountId: string, customerId = CUSTOMER_ID.value) {
+  const entry: RecordLedgerEntryInput = {
+    customerId,
+    accountId,
+    amountInCents: -5000,
+    transactionName: 'PIX ENVIADO Aposta Andorinha',
+    type: 'PIX',
+    status: 'TRANSACAO_EFETIVADA',
+    bookedAt: null,
+    merchantCategoryCode: 7995,
+    payeeDocument: null,
+  };
+
+  return new RecordLedgerEntry({
+    accounts,
+    ledger,
+    consents,
+    clients: new InMemoryClientRegistry(CLIENT, SECRET),
+    notifier,
+    idGenerator: new SequentialIdGenerator(),
+    clock,
+  }).execute(entry);
 }
 
 function refresh(refreshToken: string) {
@@ -304,17 +334,7 @@ describe('the sandbox bank, end to end through its use cases', () => {
       const { accountIds } = await approve(consentId);
       const checkingId = accountIds[0] ?? '';
 
-      await new RecordLedgerEntry(accounts, ledger, new SequentialIdGenerator(), clock).execute({
-        customerId: CUSTOMER_ID.value,
-        accountId: checkingId,
-        amountInCents: -5000,
-        transactionName: 'PIX ENVIADO Aposta Andorinha',
-        type: 'PIX',
-        status: 'TRANSACAO_EFETIVADA',
-        bookedAt: null,
-        merchantCategoryCode: 7995,
-        payeeDocument: null,
-      });
+      await book(checkingId);
 
       const page = await new ListSharedTransactions(consents, ledger, clock).execute({
         consentId,
@@ -352,25 +372,60 @@ describe('the sandbox bank, end to end through its use cases', () => {
       await describeRequest.execute(requestFor(await createConsent(), OTHER_CUSTOMER_ID.value));
       const theirs = accounts.accounts[0]?.id.value ?? '';
 
-      const refused = await new RecordLedgerEntry(
-        accounts,
-        ledger,
-        new SequentialIdGenerator(),
-        clock,
-      ).execute({
-        customerId: CUSTOMER_ID.value,
-        accountId: theirs,
-        amountInCents: -5000,
-        transactionName: 'PIX ENVIADO',
-        type: 'PIX',
-        status: 'TRANSACAO_EFETIVADA',
-        bookedAt: null,
-        merchantCategoryCode: null,
-        payeeDocument: null,
-      });
+      const refused = await book(theirs);
 
       expect(!refused.ok && refused.error.status).toBe(404);
       expect(ledger.entries).toHaveLength(0);
+      expect(notifier.notices).toHaveLength(0);
+    });
+
+    it('tells the recipient whose consent shares the account that something changed', async () => {
+      const consentId = await createConsent();
+      const { accountIds } = await approve(consentId);
+
+      await book(accountIds[0] ?? '');
+
+      expect(notifier.notices).toEqual([{ clientId: CLIENT.clientId, consentId }]);
+    });
+
+    it('tells nobody about an account no consent shares', async () => {
+      const consentId = await createConsent();
+      const described = await describeRequest.execute(requestFor(consentId));
+      const [checking, card] = described.ok ? described.value.accounts : [];
+      await decide.execute({
+        ...requestFor(consentId),
+        state: STATE,
+        codeChallenge: secrets.challengeOf(VERIFIER),
+        decision: 'APPROVE',
+        accountIds: [checking?.id ?? ''],
+      });
+
+      await book(card?.id ?? '');
+
+      expect(notifier.notices).toHaveLength(0);
+    });
+
+    it('tells nobody once the consent is revoked, and still books the entry', async () => {
+      const consentId = await createConsent();
+      const { accountIds } = await approve(consentId);
+      await new RevokeConsent(consents, tokens, clock).execute({
+        clientId: CLIENT.clientId,
+        consentId,
+      });
+
+      const booked = await book(accountIds[0] ?? '');
+
+      expect(booked.ok).toBe(true);
+      expect(notifier.notices).toHaveLength(0);
+    });
+
+    it('tells nobody once the consent has lapsed', async () => {
+      const { accountIds } = await approve(await createConsent());
+      clock.advanceByDays(181);
+
+      await book(accountIds[0] ?? '');
+
+      expect(notifier.notices).toHaveLength(0);
     });
   });
 });

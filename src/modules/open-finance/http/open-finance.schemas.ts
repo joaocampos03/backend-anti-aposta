@@ -95,3 +95,19 @@ export const monthlySummaryQuerySchema = z.object({
 });
 
 export type MonthlySummaryQuery = z.infer<typeof monthlySummaryQuerySchema>;
+
+/** The longest DataHolder consent id the column holds. */
+const EXTERNAL_CONSENT_ID_MAXIMUM_LENGTH = 100;
+
+/**
+ * A DataHolder's notice, in the Open Finance `data` envelope: which consent's
+ * resources changed. It carries no movement, no amount and no user — those
+ * are read over the protocol, with the consent's own token.
+ */
+export const dataHolderNoticeBodySchema = z.object({
+  data: z.object({
+    consentId: z.string().min(1).max(EXTERNAL_CONSENT_ID_MAXIMUM_LENGTH),
+  }),
+});
+
+export type DataHolderNoticeBody = z.infer<typeof dataHolderNoticeBodySchema>;

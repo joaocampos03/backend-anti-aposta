@@ -4,6 +4,7 @@ import type {
   ClientRegistry,
   RegisteredClient,
 } from '../../application/ports/client-registry.port.js';
+import type { DataRecipientNotifier } from '../../application/ports/data-recipient-notifier.port.js';
 import type { AuthorisationCode } from '../../domain/authorisation-code.js';
 import type { AuthorisationCodeRepository } from '../../domain/authorisation-code.repository.js';
 import type { BankAccount } from '../../domain/bank-account.js';
@@ -99,6 +100,25 @@ export class InMemoryConsentRepository implements ConsentRepository {
     const consent = await this.findById(consentId);
 
     return consent?.belongsToClient(clientId) === true ? consent : null;
+  }
+
+  async findAuthorisedSharingAccount(accountId: UniqueEntityId): Promise<readonly Consent[]> {
+    return this.consents.filter(
+      (consent) =>
+        consent.status === 'AUTHORISED' && consent.accountIds.some((id) => id.equals(accountId)),
+    );
+  }
+}
+
+/** Records what the bank told, instead of calling anybody. */
+export class RecordingDataRecipientNotifier implements DataRecipientNotifier {
+  readonly notices: { readonly clientId: string; readonly consentId: string }[] = [];
+
+  async resourcesChanged(input: {
+    readonly client: RegisteredClient;
+    readonly consentId: UniqueEntityId;
+  }): Promise<void> {
+    this.notices.push({ clientId: input.client.clientId, consentId: input.consentId.value });
   }
 }
 

@@ -112,6 +112,7 @@ model Consent {
   tokens               ConsentToken?
 
   @@index([userId, status])
+  @@index([externalConsentId])
   @@map("open_finance_consents")
 }
 
@@ -363,6 +364,32 @@ model Inbox {
   @@map("notifications_inboxes")
 }
 
+enum NotificationKind {
+  AWARENESS_NUDGE
+  BADGE_AWARDED
+  STREAK_BROKEN
+  GOAL_REACHED
+  TRANSACTIONS_INGESTED
+
+  @@map("notifications_kind")
+}
+
+/// One thing pushed to one person. The inbox is the source of truth and the
+/// stream an optimisation: a row exists before any browser sees it, and its
+/// UUID v7 id is what a reconnecting stream resumes after. `content` holds the
+/// kind's display fields — amounts in cents and short text, never a raw
+/// statement line or a token.
+model Notification {
+  id          String           @id @db.Uuid
+  recipientId String           @map("recipient_id") @db.Uuid
+  kind        NotificationKind
+  content     Json
+  createdAt   DateTime         @map("created_at") @db.Timestamptz(3)
+
+  @@index([recipientId, id])
+  @@map("notifications_notifications")
+}
+
 // ---------------------------------------------------------------------------
 // sandbox-bank — the simulated DataHolder (instituição transmissora)
 //
@@ -481,6 +508,7 @@ model SandboxConsent {
   expiresAt       DateTime             @map("expires_at") @db.Timestamptz(3)
 
   @@index([clientId])
+  @@index([accountIds], type: Gin)
   @@map("sandbox_bank_consents")
 }
 

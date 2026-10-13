@@ -26,4 +26,13 @@ export class PrismaSandboxConsentRepository implements ConsentRepository {
 
     return row === null ? null : SandboxBankMapper.consent.toDomain(row);
   }
+
+  /** `account_ids` carries a GIN index for exactly this containment test. */
+  async findAuthorisedSharingAccount(accountId: UniqueEntityId): Promise<readonly Consent[]> {
+    const rows = await this.client.sandboxConsent.findMany({
+      where: { status: 'AUTHORISED', accountIds: { has: accountId.value } },
+    });
+
+    return rows.map((row) => SandboxBankMapper.consent.toDomain(row));
+  }
 }

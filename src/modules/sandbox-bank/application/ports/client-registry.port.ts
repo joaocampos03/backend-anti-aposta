@@ -9,6 +9,8 @@ export interface RegisteredClient {
   readonly displayName: string;
   /** The only redirect the bank will send a code to. Exact match, no prefixes. */
   readonly redirectUri: string;
+  /** Where the bank says "this consent's resources changed". Enrolled, like the redirect. */
+  readonly noticeUri: string;
 }
 
 export interface ClientRegistry {

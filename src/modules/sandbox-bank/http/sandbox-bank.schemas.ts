@@ -130,6 +130,18 @@ export const customerAccountParamsSchema = z.object({ accountId: z.uuid() });
 
 export type CustomerAccountParams = z.infer<typeof customerAccountParamsSchema>;
 
+/** The demonstration console names the customer in the path instead of being them. */
+export const customerParamsSchema = z.object({ customerId: z.uuid() });
+
+export type CustomerParams = z.infer<typeof customerParamsSchema>;
+
+export const customerLedgerParamsSchema = z.object({
+  customerId: z.uuid(),
+  accountId: z.uuid(),
+});
+
+export type CustomerLedgerParams = z.infer<typeof customerLedgerParamsSchema>;
+
 /**
  * A movement to book at the bank. Signed cents, as everywhere in this API:
  * negative leaves the account. `merchantCategoryCode` is how a card payment to

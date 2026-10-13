@@ -11,6 +11,12 @@ import { RecordLedgerEntry } from '../src/modules/sandbox-bank/application/recor
 import { CryptoBankSecrets } from '../src/modules/sandbox-bank/infrastructure/crypto-bank-secrets.js';
 import { PrismaBankAccountRepository } from '../src/modules/sandbox-bank/infrastructure/prisma-bank-account.repository.js';
 import { PrismaLedgerEntryRepository } from '../src/modules/sandbox-bank/infrastructure/prisma-ledger-entry.repository.js';
+import { PrismaSandboxConsentRepository } from '../src/modules/sandbox-bank/infrastructure/prisma-sandbox-consent.repository.js';
+import { ConfiguredClientRegistry } from '../src/modules/sandbox-bank/infrastructure/configured-client-registry.js';
+import { HttpDataRecipientNotifier } from '../src/modules/sandbox-bank/infrastructure/http-data-recipient-notifier.js';
+import { CONSENT_URN_PREFIX } from '../src/modules/sandbox-bank/http/sandbox-bank.schemas.js';
+import { CreateInbox } from '../src/modules/notifications/application/create-inbox.use-case.js';
+import { PrismaInboxRepository } from '../src/modules/notifications/infrastructure/prisma-inbox.repository.js';
 import { UniqueEntityId } from '../src/shared/domain/unique-entity-id.js';
 import { Calendar } from '../src/shared/domain/calendar.js';
 import { env, sandboxLedgerWritesEnabled } from '../src/shared/infrastructure/env.js';
@@ -241,7 +247,20 @@ async function bookAtTheBank(userId: string): Promise<number> {
     throw new Error('the sandbox opens a checking account and a card');
   }
 
-  const record = new RecordLedgerEntry(accounts, new PrismaLedgerEntryRepository(prisma), idGenerator, clock);
+  // The history is booked before any consent shares these accounts, so the
+  // bank has nobody to notify yet; the notifier is the real one regardless.
+  const record = new RecordLedgerEntry({
+    accounts,
+    ledger: new PrismaLedgerEntryRepository(prisma),
+    consents: new PrismaSandboxConsentRepository(prisma),
+    clients: new ConfiguredClientRegistry(platformClient(env.OPEN_FINANCE_NOTICE_URI), env.OPEN_FINANCE_CLIENT_SECRET),
+    notifier: new HttpDataRecipientNotifier(
+      { consentUrnPrefix: CONSENT_URN_PREFIX, clientSecret: env.OPEN_FINANCE_CLIENT_SECRET },
+      logger,
+    ),
+    idGenerator,
+    clock,
+  });
   const history = buildHistory();
 
   for (const { on, ...row } of history) {
@@ -361,6 +380,7 @@ async function withRunningApi<TResult>(work: (baseUrl: string) => Promise<TResul
           classificationOverridesPerHour: env.CLASSIFICATION_OVERRIDES_PER_HOUR,
           consentCommandsPerHour: env.CONSENT_COMMANDS_PER_HOUR,
           sandboxLedgerEntriesPerHour: env.SANDBOX_BANK_LEDGER_ENTRIES_PER_HOUR,
+          demoNotificationsPerHour: env.DEMO_NOTIFICATIONS_PER_HOUR,
         },
         openFinance: {
           tokenEncryptionKey: env.OPEN_FINANCE_TOKEN_KEY,
@@ -373,11 +393,7 @@ async function withRunningApi<TResult>(work: (baseUrl: string) => Promise<TResul
           },
         },
         sandboxBank: {
-          client: {
-            clientId: env.OPEN_FINANCE_CLIENT_ID,
-            displayName: 'anti-aposta',
-            redirectUri: env.OPEN_FINANCE_REDIRECT_URI,
-          },
+          client: platformClient(`${baseUrl}/api/v1/data-holder-notices`),
           clientSecret: env.OPEN_FINANCE_CLIENT_SECRET,
           ledgerWritesEnabled: sandboxLedgerWritesEnabled(env),
         },
@@ -392,10 +408,28 @@ async function withRunningApi<TResult>(work: (baseUrl: string) => Promise<TResul
   }
 }
 
+/** The platform as the sandbox enrols it: the same id, redirect and secret it presents. */
+function platformClient(noticeUri: string): {
+  readonly clientId: string;
+  readonly displayName: string;
+  readonly redirectUri: string;
+  readonly noticeUri: string;
+} {
+  return {
+    clientId: env.OPEN_FINANCE_CLIENT_ID,
+    displayName: 'anti-aposta',
+    redirectUri: env.OPEN_FINANCE_REDIRECT_URI,
+    noticeUri,
+  };
+}
+
 async function seed(): Promise<void> {
   await ensureBookmakers();
 
   const userId = await ensureDemoUser();
+  // Registration creates the inbox through `UserRegistered`; the demo user is
+  // written directly, so it gets one here. Idempotent, like the subscriber.
+  await new CreateInbox(new PrismaInboxRepository(prisma), idGenerator, clock).execute({ userId });
   await resetDemoData(userId);
 
   const booked = await bookAtTheBank(userId);

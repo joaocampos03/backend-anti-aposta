@@ -36,6 +36,15 @@ export interface SynchronisationOutput {
   readonly ingestedCount: number;
 }
 
+/** A DataHolder's "this consent's resources changed", reduced to the consent it names. */
+export interface DataHolderNoticeInput {
+  readonly externalConsentId: string;
+}
+
+export interface NoticeOutcome {
+  readonly ingestedCount: number;
+}
+
 export interface CurrentConsentOutput {
   readonly consent: ConsentDto | null;
 }

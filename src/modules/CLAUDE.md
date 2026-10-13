@@ -6,11 +6,11 @@
 | --------------- | ------------------------------------------------------------------------------------------- |
 | `identity`      | **Implemented**: `User`, `Session`, `Credential`, `RegistrationConsent`, `SignInThrottle`, `PasswordResetToken` — registration, sign-in, sign-out, session resolution and password reset. Recovery *requests* wait on a mail decision. |
 | `gamification`  | Bootstrap only: `Streak` at zero days and an empty `BadgeCollection` on `UserRegistered`. No scoring, no awarding yet. |
-| `notifications` | Bootstrap only: the empty `Inbox`. Nothing is pushed, and there is no SSE endpoint yet.      |
+| `notifications` | **Implemented**: `Inbox` and `Notification`, persisted and pushed per user over SSE (`GET /notifications/stream`, replay by `Last-Event-ID`); announces `TransactionsIngested`; a demo-only console that sends to a user by id. Nudges and badges arrive from their own features. |
 | `open-finance`  | **Implemented**: `Consent`, `AuthorisationRequest`, `ConnectedAccount`, `Transaction`; the OAuth 2.0 + PKCE client against the DataHolder, synchronisation over HTTP, revocation; the statement and the charts as read models. |
 | `bet-detection` | **Implemented**: the three-policy chain, `Bookmaker`, `TransactionClassification` and the correction. The only context that may read a raw statement line. |
 | `awareness`     | **Implemented**: `YieldEquivalent` (the compound-interest service and the rate) and `SupportOffer`. Nudges arrive with their own feature. |
-| `sandbox-bank`  | **Implemented**: the simulated DataHolder — `BankAccount`, `LedgerEntry`, its own `Consent`, `AuthorisationCode`, `IssuedToken`; the Open Finance surface under `/sandbox`. A foreign system: nothing imports it. |
+| `sandbox-bank`  | **Implemented**: the simulated DataHolder — `BankAccount`, `LedgerEntry`, its own `Consent`, `AuthorisationCode`, `IssuedToken`; the Open Finance surface under `/sandbox`; a "resources changed" notice to the DataRecipient over HTTP after a booking. A foreign system: nothing imports it. |
 
 ## The rules that get broken most
 
@@ -39,7 +39,7 @@ identity.RegisterUser
   -> UserRegistered { userId, registeredAt }          # no name, no e-mail
        -> gamification.StartStreak                    # zero days, never day one
        -> gamification.CreateBadgeCollection          # empty; participation is not a milestone
-       -> notifications.CreateInbox                   # empty; no welcome message
+       -> notifications.CreateInbox                   # empty; no welcome message; delivery needs it
 
 identity.SignIn        -> UserSignedIn    { userId, sessionId, signedInAt }
 identity.SignOut       -> UserSignedOut   { userId, sessionId, signedOutAt }
@@ -47,12 +47,18 @@ identity.ResetPassword -> PasswordChanged { userId, changedAt }
 
 sandbox-bank  --HTTP (OAuth 2.0 + PKCE, Open Finance Brasil)-->  open-finance
 
+sandbox-bank.RecordLedgerEntry
+  --HTTP POST /api/v1/data-holder-notices { consentId }-->  open-finance.SynchroniseNotifiedConsent
+                                                            # a prompt, never data: the same pull
+
 open-finance.CompleteAuthorisation
   -> ConsentAuthorised { userId, consentId, authorisedAt }   # audit; no subscriber
 
-open-finance.CompleteAuthorisation / SynchroniseConsent      # StatementSynchronisation
+open-finance.CompleteAuthorisation / SynchroniseConsent / SynchroniseNotifiedConsent
+                                                             # StatementSynchronisation
   -> bet-detection.ClassifyTransaction (direct call, per new transaction, with the raw line)
   -> TransactionsIngested { userId, transactionIds, ingestedAt }
+       -> notifications.AnnounceIngestedTransactions   # TRANSACTIONS_INGESTED { ingestedCount } on the stream
 
 bet-detection.ClassifyTransaction
   -> BetTransactionDetected { userId, transactionId, matchedBy, confidence }

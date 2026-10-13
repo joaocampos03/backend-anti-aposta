@@ -80,6 +80,7 @@ layer. Every field name of the specification is spelled in those two files and n
 | Callback | `POST /api/v1/consents/{id}/authorisation` | `CompleteAuthorisation`: checks `state`, exchanges the code, authorises, first sync |
 | Refresh | `POST /api/v1/consents/{id}/synchronisation` | `SynchroniseConsent`: refreshes the token if needed, ingests what is new |
 | Withdraw | `POST /api/v1/consents/{id}/revocation` | `RevokeConsent`: `ConsentRevoked` → purge; then tells the bank, best effort |
+| Notice | `POST /api/v1/data-holder-notices` | `SynchroniseNotifiedConsent`: the bank says a consent's resources changed; the same synchronisation runs |
 | Read | `GET /api/v1/consents/current` | `GetCurrentConsent` |
 
 - **One authorised consent at a time.** A second `POST /consents` answers `409
@@ -113,6 +114,23 @@ every figure already follows the classification. The table is an assumed default
 
 Not handled: an entry booked as `LANCAMENTO_FUTURO` that later settles is not re-read, because the
 sandbox never settles one. A real DataHolder would need `Transaction.settle` wired in here.
+
+### Started by the institution
+
+`POST /api/v1/data-holder-notices` is how a movement booked at the bank reaches the statement
+without anybody pressing "Sincronizar". The DataHolder posts `{ "data": { "consentId": "<its id>" } }`
+with HTTP Basic and the enrolment's credentials (`requireDataHolder`, constant time — the stand-in
+for the ecosystem's mTLS). No session: the institution is not a person.
+
+The notice is a **prompt, never data**. `SynchroniseNotifiedConsent` finds the consent by the
+DataHolder's own id (`findByExternalConsentId`), asks it `authoriseIngestionAt` like the button
+does, and runs the same `StatementSynchronisation`: accounts and statements pulled over the
+protocol, with the consent's token, through the consent gate. Whose statement it is comes from the
+consent row, never from the notice. An unknown consent answers `404`; a revoked or lapsed one
+`422 CONSENT_NOT_AUTHORISED`, and nothing is read. Answers `204`.
+
+Any synchronisation that ingests something publishes `TransactionsIngested`, and `notifications`
+pushes `TRANSACTIONS_INGESTED` to the person's open screens.
 
 `IngestTransactions` remains for the integration fixtures, which arrange a statement without running
 the OAuth flow for every test. It is not the product's ingestion path.

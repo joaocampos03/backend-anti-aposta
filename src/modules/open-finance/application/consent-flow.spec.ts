@@ -20,6 +20,7 @@ import { RequestConsent } from './request-consent.use-case.js';
 import { RevokeConsent } from './revoke-consent.use-case.js';
 import { StatementSynchronisation } from './statement-synchronisation.js';
 import { SynchroniseConsent } from './synchronise-consent.use-case.js';
+import { SynchroniseNotifiedConsent } from './synchronise-notified-consent.use-case.js';
 
 const USER_ID = '0192f3c1-7a1b-7c3e-9f20-0000000000aa';
 const OTHER_USER_ID = '0192f3c1-7a1b-7c3e-9f20-0000000000bb';
@@ -38,6 +39,7 @@ let events: RecordingEventPublisher;
 let requestConsent: RequestConsent;
 let complete: CompleteAuthorisation;
 let synchronise: SynchroniseConsent;
+let synchroniseNotified: SynchroniseNotifiedConsent;
 
 function anEntry(externalId: string, overrides: Partial<SharedTransaction> = {}): SharedTransaction {
   return {
@@ -112,7 +114,18 @@ beforeEach(() => {
     synchronisation,
     clock,
   );
+  synchroniseNotified = new SynchroniseNotifiedConsent(
+    consents,
+    new ConsentAccessTokens(vault, dataHolder),
+    synchronisation,
+    clock,
+  );
 });
+
+/** The DataHolder's own id for the consent, which is all its notice names. */
+function externalIdOf(consentId: string): string {
+  return consents.consents.find((consent) => consent.id.value === consentId)?.externalConsentId ?? '';
+}
 
 /** Starts the flow and returns what the browser would carry back. */
 async function start(userId = USER_ID): Promise<{ consentId: string; state: string }> {
@@ -270,6 +283,54 @@ describe('synchronising', () => {
     const refused = await synchronise.execute({ userId: USER_ID, consentId });
 
     expect(!refused.ok && refused.error.code).toBe('CONSENT_NOT_AUTHORISED');
+  });
+});
+
+describe('a notice from the institution', () => {
+  it('reads what is new, as the button would, for the consent it names', async () => {
+    const consentId = await connect();
+    dataHolder.statements.set('bank-checking', [anEntry('entry-1'), anEntry('entry-2')]);
+
+    const noticed = await synchroniseNotified.execute({
+      externalConsentId: externalIdOf(consentId),
+    });
+
+    expect(noticed.ok && noticed.value.ingestedCount).toBe(1);
+    expect(transactions.transactions.at(-1)?.userId.value).toBe(USER_ID);
+  });
+
+  it('announces the new movements to whoever owns the consent', async () => {
+    const consentId = await connect();
+    dataHolder.statements.set('bank-checking', [anEntry('entry-1'), anEntry('entry-2')]);
+    events.published.length = 0;
+
+    await synchroniseNotified.execute({ externalConsentId: externalIdOf(consentId) });
+
+    expect(events.published.map((event) => event.payload)).toEqual([
+      expect.objectContaining({ userId: USER_ID, transactionIds: [expect.any(String)] }),
+    ]);
+  });
+
+  it('reads nothing for a consent the platform does not know', async () => {
+    const noticed = await synchroniseNotified.execute({ externalConsentId: 'urn:fake-bank:999' });
+
+    expect(!noticed.ok && noticed.error.code).toBe('CONSENT_NOT_FOUND');
+    expect(dataHolder.exchanged).toHaveLength(0);
+  });
+
+  it('reads nothing for a consent that was revoked', async () => {
+    const consentId = await connect();
+    await new RevokeConsent(consents, dataHolder, clock, events).execute({
+      userId: USER_ID,
+      consentId,
+    });
+    dataHolder.statements.set('bank-checking', [anEntry('entry-1'), anEntry('entry-2')]);
+
+    const noticed = await synchroniseNotified.execute({
+      externalConsentId: externalIdOf(consentId),
+    });
+
+    expect(!noticed.ok && noticed.error.code).toBe('CONSENT_NOT_AUTHORISED');
   });
 });
 
