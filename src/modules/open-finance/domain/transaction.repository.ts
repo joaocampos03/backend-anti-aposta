@@ -8,6 +8,14 @@ export interface TransactionRepository {
     userId: UniqueEntityId,
   ): Promise<Transaction | null>;
   /**
+   * Which of the DataHolder's ids this account already holds, so that a second
+   * synchronisation of the same statement ingests nothing twice.
+   */
+  findIngestedExternalIds(
+    accountId: UniqueEntityId,
+    candidates: readonly string[],
+  ): Promise<ReadonlySet<string>>;
+  /**
    * The override marker on the projected row. It is written separately from
    * `save` so a re-ingestion of the same transaction cannot quietly erase a
    * correction somebody made.

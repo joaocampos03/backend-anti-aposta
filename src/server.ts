@@ -1,6 +1,6 @@
 import { createApp } from './app.js';
 import { buildContainer } from './container.js';
-import { env } from '@shared/infrastructure/env.js';
+import { env, sandboxLedgerWritesEnabled } from '@shared/infrastructure/env.js';
 import { logger } from '@shared/infrastructure/logger.js';
 import { prisma } from '@shared/infrastructure/prisma.js';
 
@@ -21,6 +21,29 @@ const app = createApp(
       signInAttemptsPerQuarterHour: env.SIGN_IN_ATTEMPTS_PER_QUARTER_HOUR,
       passwordResetAttemptsPerHour: env.PASSWORD_RESET_ATTEMPTS_PER_HOUR,
       classificationOverridesPerHour: env.CLASSIFICATION_OVERRIDES_PER_HOUR,
+      consentCommandsPerHour: env.CONSENT_COMMANDS_PER_HOUR,
+      sandboxLedgerEntriesPerHour: env.SANDBOX_BANK_LEDGER_ENTRIES_PER_HOUR,
+    },
+    openFinance: {
+      tokenEncryptionKey: env.OPEN_FINANCE_TOKEN_KEY,
+      dataHolder: {
+        baseUrl: env.SANDBOX_BANK_BASE_URL,
+        authorisationScreenUrl: env.SANDBOX_BANK_AUTHORISATION_URL,
+        clientId: env.OPEN_FINANCE_CLIENT_ID,
+        clientSecret: env.OPEN_FINANCE_CLIENT_SECRET,
+        redirectUri: env.OPEN_FINANCE_REDIRECT_URI,
+      },
+    },
+    // The sandbox enrols this platform with the same id, secret and redirect
+    // the platform presents: two sides of one registration.
+    sandboxBank: {
+      client: {
+        clientId: env.OPEN_FINANCE_CLIENT_ID,
+        displayName: 'anti-aposta',
+        redirectUri: env.OPEN_FINANCE_REDIRECT_URI,
+      },
+      clientSecret: env.OPEN_FINANCE_CLIENT_SECRET,
+      ledgerWritesEnabled: sandboxLedgerWritesEnabled(env),
     },
   }),
 );

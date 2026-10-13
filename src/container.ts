@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import type { RequestHandler } from 'express';
 import { CreateBadgeCollection, StartStreak } from '@modules/gamification/index.js';
 import { UserRegistered } from '@modules/identity/index.js';
 import { RegisterUser } from '@modules/identity/application/register-user.use-case.js';
@@ -31,6 +32,7 @@ import { OpenFinanceMonthlyBetSpendReader } from '@modules/awareness/infrastruct
 import { AwarenessController } from '@modules/awareness/http/awareness.controller.js';
 import {
   ClassificationLookup,
+  ClassifyTransaction,
   ForgetUserClassifications,
   ReclassifyTransaction,
   RevertReclassification,
@@ -58,19 +60,77 @@ import {
   SummariseSpendByMonth,
   TransactionAmountLookup,
 } from '@modules/open-finance/index.js';
+import { CompleteAuthorisation } from '@modules/open-finance/application/complete-authorisation.use-case.js';
+import { ConsentAccessTokens } from '@modules/open-finance/application/consent-access-tokens.js';
+import { GetCurrentConsent } from '@modules/open-finance/application/get-current-consent.use-case.js';
+import { OPEN_FINANCE_MESSAGES } from '@modules/open-finance/application/open-finance.messages.js';
+import { RequestConsent } from '@modules/open-finance/application/request-consent.use-case.js';
+import { RevokeConsent as RevokeOpenFinanceConsent } from '@modules/open-finance/application/revoke-consent.use-case.js';
+import { StatementSynchronisation } from '@modules/open-finance/application/statement-synchronisation.js';
+import { SynchroniseConsent } from '@modules/open-finance/application/synchronise-consent.use-case.js';
+import { AesGcmTokenCipher } from '@modules/open-finance/infrastructure/aes-gcm-token-cipher.js';
 import { AwarenessYieldCalculator } from '@modules/open-finance/infrastructure/awareness-yield-calculator.js';
 import { BetDetectionClassificationReader } from '@modules/open-finance/infrastructure/bet-detection-classification-reader.js';
+import { BetDetectionTransactionClassifier } from '@modules/open-finance/infrastructure/bet-detection-transaction-classifier.js';
+import { CryptoAuthorisationSecrets } from '@modules/open-finance/infrastructure/crypto-authorisation-secrets.js';
+import { PrismaAuthorisationRequestRepository } from '@modules/open-finance/infrastructure/prisma-authorisation-request.repository.js';
 import { PrismaConnectedAccountRepository } from '@modules/open-finance/infrastructure/prisma-connected-account.repository.js';
 import { PrismaConsentRepository } from '@modules/open-finance/infrastructure/prisma-consent.repository.js';
+import { PrismaConsentTokenVault } from '@modules/open-finance/infrastructure/prisma-consent-token-vault.js';
 import { PrismaMonthlySpendQuery } from '@modules/open-finance/infrastructure/monthly-spend.query.js';
 import { PrismaTransactionLedgerQuery } from '@modules/open-finance/infrastructure/transaction-ledger.query.js';
 import { PrismaTransactionRepository } from '@modules/open-finance/infrastructure/prisma-transaction.repository.js';
+import {
+  SandboxBankDataHolder,
+  type DataHolderConnection,
+} from '@modules/open-finance/infrastructure/sandbox-bank-data-holder.js';
 import { OpenFinanceController } from '@modules/open-finance/http/open-finance.controller.js';
 import {
+  authorisationCallbackBodySchema,
+  consentParamsSchema,
   listTransactionsQuerySchema,
   monthlySummaryQuerySchema,
 } from '@modules/open-finance/http/open-finance.schemas.js';
 import { openFinanceFailures } from '@modules/open-finance/application/open-finance.failures.js';
+import { AccessTokenIntrospection } from '@modules/sandbox-bank/application/access-token-introspection.js';
+import { AuthorisationRequestCheck } from '@modules/sandbox-bank/application/authorisation-request-check.js';
+import { CreateConsent } from '@modules/sandbox-bank/application/create-consent.use-case.js';
+import { DecideAuthorisation } from '@modules/sandbox-bank/application/decide-authorisation.use-case.js';
+import { DemoAccountOpening } from '@modules/sandbox-bank/application/demo-account-opening.js';
+import { DescribeAuthorisationRequest } from '@modules/sandbox-bank/application/describe-authorisation-request.use-case.js';
+import { IssueToken } from '@modules/sandbox-bank/application/issue-token.use-case.js';
+import { ListCustomerAccounts } from '@modules/sandbox-bank/application/list-customer-accounts.use-case.js';
+import { ListSharedAccounts } from '@modules/sandbox-bank/application/list-shared-accounts.use-case.js';
+import { ListSharedTransactions } from '@modules/sandbox-bank/application/list-shared-transactions.use-case.js';
+import type { RegisteredClient } from '@modules/sandbox-bank/application/ports/client-registry.port.js';
+import { RecordLedgerEntry } from '@modules/sandbox-bank/application/record-ledger-entry.use-case.js';
+import { RevokeConsent as RevokeSandboxConsent } from '@modules/sandbox-bank/application/revoke-consent.use-case.js';
+import { sandboxBankFailures } from '@modules/sandbox-bank/application/sandbox-bank.failures.js';
+import { SANDBOX_BANK_MESSAGES } from '@modules/sandbox-bank/application/sandbox-bank.messages.js';
+import { TokenIssuance } from '@modules/sandbox-bank/application/token-issuance.js';
+import { ConfiguredClientRegistry } from '@modules/sandbox-bank/infrastructure/configured-client-registry.js';
+import { CryptoBankSecrets } from '@modules/sandbox-bank/infrastructure/crypto-bank-secrets.js';
+import { PrismaAuthorisationCodeRepository } from '@modules/sandbox-bank/infrastructure/prisma-authorisation-code.repository.js';
+import { PrismaBankAccountRepository } from '@modules/sandbox-bank/infrastructure/prisma-bank-account.repository.js';
+import { PrismaIssuedTokenRepository } from '@modules/sandbox-bank/infrastructure/prisma-issued-token.repository.js';
+import { PrismaLedgerEntryRepository } from '@modules/sandbox-bank/infrastructure/prisma-ledger-entry.repository.js';
+import { PrismaSandboxConsentRepository } from '@modules/sandbox-bank/infrastructure/prisma-sandbox-consent.repository.js';
+import { bankTokenGuard } from '@modules/sandbox-bank/http/bank-token-guard.js';
+import { openFinanceErrorEnvelope } from '@modules/sandbox-bank/http/protocol-error-envelopes.js';
+import { SandboxBankAppController } from '@modules/sandbox-bank/http/sandbox-bank-app.controller.js';
+import { SandboxBankProtocolController } from '@modules/sandbox-bank/http/sandbox-bank-protocol.controller.js';
+import {
+  authorisationDecisionBodySchema,
+  authorisationQuerySchema,
+  consentParamsSchema as sandboxConsentParamsSchema,
+  createConsentBodySchema,
+  customerAccountParamsSchema,
+  ledgerEntryBodySchema,
+  sharedAccountParamsSchema,
+  sharedTransactionsQuerySchema,
+  tokenRequestSchema,
+} from '@modules/sandbox-bank/http/sandbox-bank.schemas.js';
+import type { SandboxBankRouteDependencies } from '@modules/sandbox-bank/http/sandbox-bank.routes.js';
 import { SessionCallerResolver } from '@modules/identity/http/session-caller-resolver.js';
 import { CreateInbox } from '@modules/notifications/index.js';
 import { PrismaInboxRepository } from '@modules/notifications/infrastructure/prisma-inbox.repository.js';
@@ -102,6 +162,21 @@ export interface ContainerSettings {
   readonly registrationSuccessesPerHour: number;
   readonly signInAttemptsPerQuarterHour: number;
   readonly passwordResetAttemptsPerHour: number;
+  readonly consentCommandsPerHour: number;
+  readonly sandboxLedgerEntriesPerHour: number;
+}
+
+/** This platform as a DataRecipient: its key for tokens at rest, and its enrolment. */
+export interface OpenFinanceSettings {
+  readonly tokenEncryptionKey: string;
+  readonly dataHolder: DataHolderConnection;
+}
+
+/** The simulated institution: the one client it has enrolled, and whether it takes new entries. */
+export interface SandboxBankSettings {
+  readonly client: RegisteredClient;
+  readonly clientSecret: string;
+  readonly ledgerWritesEnabled: boolean;
 }
 
 export interface ContainerInput {
@@ -111,6 +186,8 @@ export interface ContainerInput {
   /** Express `trust proxy`: which hop may report the client address. */
   readonly trustProxy: string | false;
   readonly settings: ContainerSettings;
+  readonly openFinance: OpenFinanceSettings;
+  readonly sandboxBank: SandboxBankSettings;
   /** Overridden in tests so an issued session always lands on the same instant. */
   readonly clock?: Clock;
 }
@@ -259,9 +336,63 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     ),
   });
 
+  // The consent flow. `open-finance` reaches the DataHolder over HTTP through
+  // `SandboxBankDataHolder` — the anti-corruption layer — never by importing
+  // `sandbox-bank`, even though the sandbox is wired a few lines below.
+  const tokenCipher = new AesGcmTokenCipher(input.openFinance.tokenEncryptionKey);
+  const authorisationRequests = new PrismaAuthorisationRequestRepository(input.prisma, tokenCipher);
+  const tokenVault = new PrismaConsentTokenVault(input.prisma, tokenCipher);
+  const dataHolder = new SandboxBankDataHolder(input.openFinance.dataHolder, clock);
+  const authorisationSecrets = new CryptoAuthorisationSecrets();
+  const statementSynchronisation = new StatementSynchronisation({
+    dataHolder,
+    consents,
+    accounts: connectedAccounts,
+    transactions,
+    classifier: new BetDetectionTransactionClassifier(
+      new ClassifyTransaction({ classifications, bookmakers, clock, events: eventBus }),
+    ),
+    idGenerator,
+    events: eventBus,
+  });
+
+  const consentUseCases = {
+    requestConsent: new RequestConsent({
+      consents,
+      authorisationRequests,
+      dataHolder,
+      secrets: authorisationSecrets,
+      idGenerator,
+      clock,
+    }),
+    completeAuthorisation: new CompleteAuthorisation({
+      consents,
+      authorisationRequests,
+      dataHolder,
+      secrets: authorisationSecrets,
+      vault: tokenVault,
+      synchronisation: statementSynchronisation,
+      clock,
+      events: eventBus,
+    }),
+    synchroniseConsent: new SynchroniseConsent(
+      consents,
+      new ConsentAccessTokens(tokenVault, dataHolder),
+      statementSynchronisation,
+      clock,
+    ),
+    revokeConsent: new RevokeOpenFinanceConsent(consents, dataHolder, clock, eventBus),
+    getCurrentConsent: new GetCurrentConsent(consents, clock),
+  };
+
   subscribeToRevocation({
     eventBus,
-    purgeFinancialData: new PurgeUserFinancialData(transactions, connectedAccounts),
+    purgeFinancialData: new PurgeUserFinancialData({
+      transactions,
+      accounts: connectedAccounts,
+      tokens: tokenVault,
+      authorisationRequests,
+    }),
     forgetClassifications: new ForgetUserClassifications(classifications),
   });
 
@@ -273,6 +404,11 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     monthlySummary: validateQuery(
       monthlySummaryQuerySchema,
       openFinanceFailures.chartsFilterInvalid,
+    ),
+    consentParams: validateParams(consentParamsSchema, openFinanceFailures.consentRequestInvalid),
+    authorisationCallback: validateBody(
+      authorisationCallbackBodySchema,
+      openFinanceFailures.consentRequestInvalid,
     ),
     transactionIdParams: validateParams(
       transactionIdParamsSchema,
@@ -350,13 +486,29 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     },
     openFinance: {
       controller: new OpenFinanceController(
-        { listTransactions, summariseSpendByMonth, listConnectedAccounts },
-        { listTransactions: queries.listTransactions, monthlySummary: queries.monthlySummary },
+        { listTransactions, summariseSpendByMonth, listConnectedAccounts, ...consentUseCases },
+        {
+          listTransactions: queries.listTransactions,
+          monthlySummary: queries.monthlySummary,
+          consentParams: queries.consentParams,
+          authorisationCallback: queries.authorisationCallback,
+        },
       ),
       requireSession: sessionGuard,
       validateListTransactionsQuery: queries.listTransactions.middleware,
       validateMonthlySummaryQuery: queries.monthlySummary.middleware,
+      validateConsentParams: queries.consentParams.middleware,
+      validateAuthorisationCallback: queries.authorisationCallback.middleware,
+      consentCommandRateLimits: [
+        windowedRateLimit({
+          code: 'TOO_MANY_ATTEMPTS',
+          message: OPEN_FINANCE_MESSAGES.tooManyConsentCommands,
+          limit: input.settings.consentCommandsPerHour,
+          windowInMinutes: MINUTES_IN_AN_HOUR,
+        }),
+      ],
     },
+    sandboxBank: buildSandboxBank({ input, clock, idGenerator, sessionGuard }),
     betDetection: {
       controller: new BetDetectionController(
         reclassifyTransaction,
@@ -380,6 +532,131 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       controller: new AwarenessController(evaluateSupportOffer),
       requireSession: sessionGuard,
     },
+  };
+}
+
+interface SandboxBankWiring {
+  readonly input: ContainerInput;
+  readonly clock: Clock;
+  readonly idGenerator: UuidV7IdGenerator;
+  readonly sessionGuard: RequestHandler;
+}
+
+/**
+ * The simulated institution. It shares the process and the database with the
+ * platform and nothing else: its own tables, its own clients and tokens, and
+ * an HTTP surface that `open-finance` calls like any other DataHolder's.
+ */
+function buildSandboxBank({
+  input,
+  clock,
+  idGenerator,
+  sessionGuard,
+}: SandboxBankWiring): SandboxBankRouteDependencies {
+  const secrets = new CryptoBankSecrets();
+  const clients = new ConfiguredClientRegistry(
+    input.sandboxBank.client,
+    input.sandboxBank.clientSecret,
+  );
+  const accounts = new PrismaBankAccountRepository(input.prisma);
+  const ledger = new PrismaLedgerEntryRepository(input.prisma);
+  const consents = new PrismaSandboxConsentRepository(input.prisma);
+  const codes = new PrismaAuthorisationCodeRepository(input.prisma);
+  const tokens = new PrismaIssuedTokenRepository(input.prisma);
+  const demoAccounts = new DemoAccountOpening(accounts, secrets, idGenerator);
+  const requests = new AuthorisationRequestCheck(clients, consents);
+  const introspection = new AccessTokenIntrospection(tokens, secrets, clock);
+
+  const inputs = {
+    tokenRequest: validateBody(tokenRequestSchema, sandboxBankFailures.invalidTokenRequest),
+    createConsentBody: validateBody(createConsentBodySchema, sandboxBankFailures.validationFailed),
+    consentParams: validateParams(sandboxConsentParamsSchema, sandboxBankFailures.validationFailed),
+    sharedAccountParams: validateParams(
+      sharedAccountParamsSchema,
+      sandboxBankFailures.validationFailed,
+    ),
+    sharedTransactionsQuery: validateQuery(
+      sharedTransactionsQuerySchema,
+      sandboxBankFailures.validationFailed,
+    ),
+    consentsToken: bankTokenGuard(introspection, 'CONSENTS'),
+    accountsToken: bankTokenGuard(introspection, 'ACCOUNTS'),
+    authorisationQuery: validateQuery(authorisationQuerySchema, sandboxBankFailures.validationFailed),
+    authorisationDecision: validateBody(
+      authorisationDecisionBodySchema,
+      sandboxBankFailures.validationFailed,
+    ),
+    customerAccountParams: validateParams(
+      customerAccountParamsSchema,
+      sandboxBankFailures.validationFailed,
+    ),
+    ledgerEntryBody: validateBody(ledgerEntryBodySchema, sandboxBankFailures.validationFailed),
+  };
+
+  const protocol = new SandboxBankProtocolController(
+    {
+      issueToken: new IssueToken({
+        clients,
+        consents,
+        codes,
+        tokens,
+        issuance: new TokenIssuance(tokens, secrets, idGenerator),
+        secrets,
+        clock,
+      }),
+      createConsent: new CreateConsent(consents, idGenerator, clock),
+      revokeConsent: new RevokeSandboxConsent(consents, tokens, clock),
+      listSharedAccounts: new ListSharedAccounts(consents, accounts, clock),
+      listSharedTransactions: new ListSharedTransactions(consents, ledger, clock),
+    },
+    inputs,
+    clock,
+  );
+
+  const app = new SandboxBankAppController(
+    {
+      describeAuthorisationRequest: new DescribeAuthorisationRequest(requests, demoAccounts, clock),
+      decideAuthorisation: new DecideAuthorisation({
+        requests,
+        consents,
+        accounts,
+        codes,
+        secrets,
+        idGenerator,
+        clock,
+      }),
+      listCustomerAccounts: new ListCustomerAccounts(demoAccounts, clock),
+      recordLedgerEntry: new RecordLedgerEntry(accounts, ledger, idGenerator, clock),
+    },
+    inputs,
+  );
+
+  return {
+    protocol,
+    app,
+    requireSession: sessionGuard,
+    validateTokenRequest: inputs.tokenRequest.middleware,
+    validateCreateConsentBody: inputs.createConsentBody.middleware,
+    validateConsentParams: inputs.consentParams.middleware,
+    validateSharedAccountParams: inputs.sharedAccountParams.middleware,
+    validateSharedTransactionsQuery: inputs.sharedTransactionsQuery.middleware,
+    requireConsentsToken: inputs.consentsToken.middleware,
+    requireAccountsToken: inputs.accountsToken.middleware,
+    openFinanceErrors: openFinanceErrorEnvelope(clock),
+    validateAuthorisationQuery: inputs.authorisationQuery.middleware,
+    validateAuthorisationDecision: inputs.authorisationDecision.middleware,
+    validateCustomerAccountParams: inputs.customerAccountParams.middleware,
+    validateLedgerEntryBody: inputs.ledgerEntryBody.middleware,
+    ledgerWriteRateLimits: input.sandboxBank.ledgerWritesEnabled
+      ? [
+          windowedRateLimit({
+            code: 'TOO_MANY_ATTEMPTS',
+            message: SANDBOX_BANK_MESSAGES.tooManyLedgerEntries,
+            limit: input.settings.sandboxLedgerEntriesPerHour,
+            windowInMinutes: MINUTES_IN_AN_HOUR,
+          }),
+        ]
+      : null,
   };
 }
 

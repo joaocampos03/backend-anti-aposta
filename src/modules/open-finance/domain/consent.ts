@@ -1,6 +1,7 @@
 import { AggregateRoot } from '@shared/domain/aggregate-root.js';
 import { fail, ok, type Result } from '@shared/domain/result.js';
 import type { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
+import { ConsentAuthorised } from './events/consent-authorised.js';
 import { ConsentRevoked } from './events/consent-revoked.js';
 import { OpenFinanceError } from './open-finance.errors.js';
 
@@ -16,6 +17,8 @@ export type SyncStatus = 'NO_CONSENT' | 'SYNCING' | 'READY';
 
 interface ConsentProperties {
   readonly userId: UniqueEntityId;
+  /** The id the DataHolder gave this consent; its tokens are bound to it. */
+  readonly externalConsentId: string;
   readonly status: ConsentStatus;
   readonly createdAt: Date;
   readonly expiresAt: Date;
@@ -42,6 +45,26 @@ export class Consent extends AggregateRoot {
     this.properties = properties;
   }
 
+  /**
+   * Asked for, and registered at the DataHolder, but nobody has said yes yet.
+   * Nothing can be ingested against it until the person authorises it there.
+   */
+  static request(input: {
+    readonly id: UniqueEntityId;
+    readonly userId: UniqueEntityId;
+    readonly externalConsentId: string;
+    readonly createdAt: Date;
+    readonly expiresAt: Date;
+  }): Consent {
+    const { id, ...properties } = input;
+
+    return new Consent(id, {
+      ...properties,
+      status: 'AWAITING_AUTHORISATION',
+      lastSyncedAt: null,
+    });
+  }
+
   static restore(id: UniqueEntityId, properties: ConsentProperties): Consent {
     return new Consent(id, properties);
   }
@@ -50,7 +73,24 @@ export class Consent extends AggregateRoot {
     return this.properties.userId;
   }
 
+  get externalConsentId(): string {
+    return this.properties.externalConsentId;
+  }
+
   get status(): ConsentStatus {
+    return this.properties.status;
+  }
+
+  /**
+   * The status as the person should read it. An authorised consent past its
+   * expiry is `EXPIRED` on the screen, whatever the stored row still says —
+   * nothing runs at midnight to rewrite it.
+   */
+  statusAt(moment: Date): ConsentStatus {
+    if (this.properties.status === 'AUTHORISED' && moment >= this.properties.expiresAt) {
+      return 'EXPIRED';
+    }
+
     return this.properties.status;
   }
 
@@ -80,6 +120,44 @@ export class Consent extends AggregateRoot {
     }
 
     return ok(undefined);
+  }
+
+  /**
+   * The DataHolder confirmed the person's yes, by exchanging the code. Only a
+   * consent still waiting, and still in date, can become authorised.
+   */
+  authorise(moment: Date): Result<void, OpenFinanceError<'CONSENT_NOT_AWAITING_AUTHORISATION'>> {
+    if (!this.isAwaitingAuthorisationAt(moment)) {
+      return fail(OpenFinanceError.consentNotAwaitingAuthorisation());
+    }
+
+    this.properties = { ...this.properties, status: 'AUTHORISED' };
+    this.addEvent(
+      new ConsentAuthorised({
+        userId: this.properties.userId,
+        consentId: this.id,
+        authorisedAt: moment,
+      }),
+    );
+
+    return ok(undefined);
+  }
+
+  /** The person said no at the DataHolder. Nothing was shared, so nothing to purge. */
+  reject(moment: Date): Result<void, OpenFinanceError<'CONSENT_NOT_AWAITING_AUTHORISATION'>> {
+    if (!this.isAwaitingAuthorisationAt(moment)) {
+      return fail(OpenFinanceError.consentNotAwaitingAuthorisation());
+    }
+
+    this.properties = { ...this.properties, status: 'REJECTED' };
+
+    return ok(undefined);
+  }
+
+  private isAwaitingAuthorisationAt(moment: Date): boolean {
+    return (
+      this.properties.status === 'AWAITING_AUTHORISATION' && moment < this.properties.expiresAt
+    );
   }
 
   markSynced(moment: Date): void {

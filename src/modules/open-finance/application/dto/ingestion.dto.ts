@@ -10,6 +10,8 @@ import type {
  */
 export interface IngestedTransaction {
   readonly accountId: string;
+  /** The institution's id for the movement, unique per account. */
+  readonly externalId: string;
   readonly occurredAt: Date;
   readonly amountInCents: number;
   readonly counterparty: string;

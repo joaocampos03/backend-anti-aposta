@@ -14,7 +14,14 @@ const TABLES = [
   'gamification_badge_collections',
   'gamification_streaks',
   'notifications_inboxes',
+  'open_finance_authorisation_requests',
+  'open_finance_consent_tokens',
   'open_finance_consents',
+  'sandbox_bank_ledger_entries',
+  'sandbox_bank_accounts',
+  'sandbox_bank_authorisation_codes',
+  'sandbox_bank_issued_tokens',
+  'sandbox_bank_consents',
 ] as const;
 
 /** Every test starts from an empty database, so no test depends on another. */

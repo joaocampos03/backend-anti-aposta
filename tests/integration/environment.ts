@@ -19,4 +19,7 @@ export const INTEGRATION_ENVIRONMENT: Readonly<Record<string, string>> = {
   REGISTRATION_ATTEMPTS_PER_HOUR: '10000',
   REGISTRATION_SUCCESSES_PER_HOUR: '10000',
   LOG_LEVEL: 'silent',
+  // Test-only values, meaningless outside this suite's throwaway database.
+  OPEN_FINANCE_TOKEN_KEY: 'dGVzdC1vbmx5LWtleS10aGlydHktdHdvLWJ5dGVzISE=',
+  OPEN_FINANCE_CLIENT_SECRET: 'integration-suite-client-secret',
 };

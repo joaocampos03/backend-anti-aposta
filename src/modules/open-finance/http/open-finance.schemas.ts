@@ -67,6 +67,29 @@ export const listTransactionsQuerySchema = z.object({
 
 export type ListTransactionsQuery = z.infer<typeof listTransactionsQuerySchema>;
 
+export const consentParamsSchema = z.object({ consentId: z.uuid() });
+
+export type ConsentParams = z.infer<typeof consentParamsSchema>;
+
+const CALLBACK_VALUE_MAXIMUM_LENGTH = 512;
+
+/**
+ * The DataHolder's callback, relayed as it arrived: `code` and `state` on a
+ * yes, `error` and `state` on a no. Exactly one of `code` and `error`.
+ */
+export const authorisationCallbackBodySchema = z.union([
+  z.strictObject({
+    state: z.string().min(1).max(CALLBACK_VALUE_MAXIMUM_LENGTH),
+    code: z.string().min(1).max(CALLBACK_VALUE_MAXIMUM_LENGTH),
+  }),
+  z.strictObject({
+    state: z.string().min(1).max(CALLBACK_VALUE_MAXIMUM_LENGTH),
+    error: z.string().min(1).max(CALLBACK_VALUE_MAXIMUM_LENGTH),
+  }),
+]);
+
+export type AuthorisationCallbackBody = z.infer<typeof authorisationCallbackBodySchema>;
+
 export const monthlySummaryQuerySchema = z.object({
   months: z.coerce.number().int().min(1).max(MAXIMUM_MONTHS).default(MAXIMUM_MONTHS),
 });

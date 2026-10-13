@@ -28,10 +28,13 @@ export interface IngestTransactionsDependencies {
 }
 
 /**
- * Writes what a connected account shared.
+ * Writes rows that are already in this context's words, against the caller's
+ * authorised consent.
  *
- * It has no HTTP route: the Open Finance flow calls it once that feature
- * exists, and the synthetic seed calls it today. Every transaction goes through
+ * It has no HTTP route and is not the product's ingestion path: that is
+ * `StatementSynchronisation`, which reads the DataHolder over HTTP. This one is
+ * kept for the integration fixtures, which arrange a statement without running
+ * the OAuth flow for every test. Every transaction goes through
  * the `Consent` aggregate on the way in, which is where "no financial data
  * without an authorised consent" is actually enforced rather than merely
  * intended.
@@ -106,6 +109,7 @@ export class IngestTransactions
       id: this.dependencies.idGenerator.generate(),
       consent,
       accountId: UniqueEntityId.restore(row.accountId),
+      externalId: row.externalId,
       occurredAt: row.occurredAt,
       amount: amount.value,
       counterparty: counterparty.value,

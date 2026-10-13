@@ -21,7 +21,8 @@ tests. A kernel type nobody uses is speculation.
 
 `AppError` is `{ code, message, status, details }`: `code` is the frontend's stable contract,
 `message` is the **Portuguese sentence a person reads**, `details` is keyed by field name. A use
-case returns it inside a `Result`; it is never thrown.
+case returns it inside a `Result`; it is never thrown. `502` exists for an upstream that failed
+us — the Open Finance DataHolder — so "they are down" reads differently from "we broke".
 
 `Clock`, `IdGenerator` and `EventPublisher` are the three ports every module injects. `new Date()`
 and `crypto.randomUUID()` in a use case are bugs — ESLint fails the first one for you.

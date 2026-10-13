@@ -11,6 +11,7 @@ const LATER = new Date('2027-10-11T15:00:00.000Z');
 function aConsent(status: ConsentStatus = 'AUTHORISED', lastSyncedAt: Date | null = NOW): Consent {
   return Consent.restore(CONSENT_ID, {
     userId: USER_ID,
+    externalConsentId: 'urn:sandbox-bank:consent',
     status,
     createdAt: NOW,
     expiresAt: new Date('2027-04-11T15:00:00.000Z'),
@@ -91,6 +92,60 @@ describe('Consent', () => {
       consent.revoke(NOW);
 
       expect(consent.pullEvents()).toHaveLength(0);
+    });
+  });
+
+  describe('the authorisation flow', () => {
+    function aRequestedConsent(): Consent {
+      return Consent.request({
+        id: CONSENT_ID,
+        userId: USER_ID,
+        externalConsentId: 'urn:sandbox-bank:consent',
+        createdAt: NOW,
+        expiresAt: new Date('2027-04-11T15:00:00.000Z'),
+      });
+    }
+
+    it('starts awaiting authorisation, and admits no ingestion yet', () => {
+      const consent = aRequestedConsent();
+
+      expect(consent.status).toBe('AWAITING_AUTHORISATION');
+      expect(consent.authoriseIngestionAt(NOW).ok).toBe(false);
+      expect(consent.syncStatusAt(NOW)).toBe('NO_CONSENT');
+    });
+
+    it('becomes authorised, records why, and starts SYNCING', () => {
+      const consent = aRequestedConsent();
+
+      expect(consent.authorise(NOW).ok).toBe(true);
+      expect(consent.pullEvents()[0]?.name).toBe('ConsentAuthorised');
+      expect(consent.syncStatusAt(NOW)).toBe('SYNCING');
+    });
+
+    it('cannot be authorised twice', () => {
+      const consent = aRequestedConsent();
+      consent.authorise(NOW);
+
+      const again = consent.authorise(NOW);
+
+      expect(!again.ok && again.error.code).toBe('CONSENT_NOT_AWAITING_AUTHORISATION');
+    });
+
+    it('cannot be authorised once the request has lapsed', () => {
+      expect(aRequestedConsent().authorise(LATER).ok).toBe(false);
+    });
+
+    it('is rejected when the person said no, and never shares anything', () => {
+      const consent = aRequestedConsent();
+
+      expect(consent.reject(NOW).ok).toBe(true);
+      expect(consent.status).toBe('REJECTED');
+      expect(consent.authorise(NOW).ok).toBe(false);
+    });
+
+    it('reads as EXPIRED once an authorised consent passes its expiry', () => {
+      expect(aConsent().statusAt(NOW)).toBe('AUTHORISED');
+      expect(aConsent().statusAt(LATER)).toBe('EXPIRED');
     });
   });
 });
