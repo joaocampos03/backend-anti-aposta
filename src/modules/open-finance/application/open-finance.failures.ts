@@ -28,6 +28,13 @@ export const openFinanceFailures = {
   consentAlreadyAuthorised: (): AppError =>
     new AppError('CONSENT_ALREADY_AUTHORISED', OPEN_FINANCE_MESSAGES.consentAlreadyAuthorised, 409),
 
+  /** Only the institution may notify; anybody else gets the same answer as no credentials. */
+  dataHolderNotRecognised: (): AppError =>
+    new AppError('UNAUTHENTICATED', OPEN_FINANCE_MESSAGES.dataHolderNotRecognised, 401),
+
+  dataHolderNoticeInvalid: (details: AppErrorDetails): AppError =>
+    new AppError('VALIDATION_FAILED', OPEN_FINANCE_MESSAGES.dataHolderNoticeInvalid, 422, details),
+
   authorisationNotPending: (): AppError =>
     new AppError('AUTHORISATION_NOT_PENDING', OPEN_FINANCE_MESSAGES.authorisationNotPending, 409),
 

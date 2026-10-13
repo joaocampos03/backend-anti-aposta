@@ -24,12 +24,17 @@ const DEFAULT_SETTINGS: ContainerSettings = {
   classificationOverridesPerHour: 10_000,
   consentCommandsPerHour: 10_000,
   sandboxLedgerEntriesPerHour: 10_000,
+  demoNotificationsPerHour: 10_000,
 };
+
+/** Nothing listens here either: `startTestServer` points the bank's notices at itself. */
+const UNREACHABLE_NOTICE_URI = 'http://127.0.0.1:9/api/v1/data-holder-notices';
 
 export const TEST_CLIENT = {
   clientId: 'anti-aposta',
   displayName: 'anti-aposta',
   redirectUri: 'http://localhost:3000/api/open-finance/callback',
+  noticeUri: UNREACHABLE_NOTICE_URI,
 } as const;
 
 const CLIENT_SECRET = INTEGRATION_ENVIRONMENT['OPEN_FINANCE_CLIENT_SECRET'] ?? '';
@@ -62,6 +67,8 @@ export interface TestAppOptions {
   readonly trustProxy?: string | false;
   readonly dataHolderBaseUrl?: string;
   readonly ledgerWritesEnabled?: boolean;
+  /** Where the sandbox bank posts its "resources changed" notices. */
+  readonly noticeUri?: string;
 }
 
 /**
@@ -89,6 +96,7 @@ export function createTestApp(
       },
       sandboxBank: {
         ...TEST_SANDBOX_BANK,
+        client: { ...TEST_CLIENT, noticeUri: options.noticeUri ?? TEST_CLIENT.noticeUri },
         ledgerWritesEnabled: options.ledgerWritesEnabled ?? TEST_SANDBOX_BANK.ledgerWritesEnabled,
       },
     }),
@@ -106,7 +114,14 @@ export interface RunningTestServer {
  * sandbox over HTTP — the same round trip production makes, through the
  * network stack rather than a function call.
  */
-export async function startTestServer(): Promise<RunningTestServer> {
+export interface TestServerOptions {
+  /** False points the bank's notices at nothing, as when the platform is down. */
+  readonly noticeReachable?: boolean;
+}
+
+export async function startTestServer(
+  options: TestServerOptions = {},
+): Promise<RunningTestServer> {
   const server = createServer();
 
   await new Promise<void>((resolve) => {
@@ -115,7 +130,16 @@ export async function startTestServer(): Promise<RunningTestServer> {
 
   const { port } = server.address() as AddressInfo;
   const baseUrl = `http://127.0.0.1:${String(port)}`;
-  const app = createTestApp({}, { dataHolderBaseUrl: `${baseUrl}/sandbox/open-finance/v2` });
+  const app = createTestApp(
+    {},
+    {
+      dataHolderBaseUrl: `${baseUrl}/sandbox/open-finance/v2`,
+      noticeUri:
+        options.noticeReachable === false
+          ? TEST_CLIENT.noticeUri
+          : `${baseUrl}/api/v1/data-holder-notices`,
+    },
+  );
   server.on('request', app);
 
   return {

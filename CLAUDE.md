@@ -139,8 +139,8 @@ tests/integration/               # real Postgres, truncated between tests
 ### Event flow
 
 ```
-sandbox-bank  --HTTP-->  open-finance.IngestTransactions
-     -> TransactionsIngested
+sandbox-bank  --HTTP-->  open-finance.SynchroniseConsent      (pulled; also prompted by the bank's notice)
+     -> TransactionsIngested                                  -> notifications (TRANSACTIONS_INGESTED)
           -> bet-detection.ClassifyTransactions
                -> BetTransactionDetected
                     -> awareness.GenerateNudge   -> AwarenessNudgeGenerated -> notifications

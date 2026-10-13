@@ -23,6 +23,7 @@ const app = createApp(
       classificationOverridesPerHour: env.CLASSIFICATION_OVERRIDES_PER_HOUR,
       consentCommandsPerHour: env.CONSENT_COMMANDS_PER_HOUR,
       sandboxLedgerEntriesPerHour: env.SANDBOX_BANK_LEDGER_ENTRIES_PER_HOUR,
+      demoNotificationsPerHour: env.DEMO_NOTIFICATIONS_PER_HOUR,
     },
     openFinance: {
       tokenEncryptionKey: env.OPEN_FINANCE_TOKEN_KEY,
@@ -41,6 +42,7 @@ const app = createApp(
         clientId: env.OPEN_FINANCE_CLIENT_ID,
         displayName: 'anti-aposta',
         redirectUri: env.OPEN_FINANCE_REDIRECT_URI,
+        noticeUri: env.OPEN_FINANCE_NOTICE_URI,
       },
       clientSecret: env.OPEN_FINANCE_CLIENT_SECRET,
       ledgerWritesEnabled: sandboxLedgerWritesEnabled(env),

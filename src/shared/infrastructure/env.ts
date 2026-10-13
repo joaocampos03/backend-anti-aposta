@@ -64,6 +64,12 @@ const environmentSchema = z.object({
   OPEN_FINANCE_CLIENT_SECRET: z.string().min(16),
   /** The frontend route that receives the DataHolder's redirect and relays it here. */
   OPEN_FINANCE_REDIRECT_URI: z.url().default('http://localhost:3000/api/open-finance/callback'),
+  /**
+   * Where the DataHolder tells this platform that a consent's resources
+   * changed. Enrolled at the institution like the redirect; the notice only
+   * prompts a synchronisation, it carries no data.
+   */
+  OPEN_FINANCE_NOTICE_URI: z.url().default('http://localhost:3333/api/v1/data-holder-notices'),
 
   // -------------------------------------------------------------------------
   // sandbox-bank: the simulated DataHolder, reached over HTTP like any other
@@ -79,6 +85,11 @@ const environmentSchema = z.object({
    */
   SANDBOX_BANK_LEDGER_WRITES: z.enum(['enabled', 'disabled']).default('enabled'),
   SANDBOX_BANK_LEDGER_ENTRIES_PER_HOUR: z.coerce.number().int().positive().default(120),
+  /**
+   * The demonstration console's sends to a person by id. Mounted on the same
+   * switch as the sandbox's ledger writes, so never in production.
+   */
+  DEMO_NOTIFICATIONS_PER_HOUR: z.coerce.number().int().positive().default(120),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

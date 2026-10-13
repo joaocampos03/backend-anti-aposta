@@ -68,6 +68,14 @@ export class InMemoryConsentRepository implements ConsentRepository {
 
     return theirs.at(-1) ?? null;
   }
+
+  async findByExternalConsentId(externalConsentId: string): Promise<Consent | null> {
+    const matching = this.consents.filter(
+      (consent) => consent.externalConsentId === externalConsentId,
+    );
+
+    return matching.at(-1) ?? null;
+  }
 }
 
 export class InMemoryAuthorisationRequestRepository implements AuthorisationRequestRepository {

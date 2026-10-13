@@ -26,6 +26,8 @@ export interface SandboxBankRouteDependencies {
   readonly validateAuthorisationDecision: RequestHandler;
   readonly validateCustomerAccountParams: RequestHandler;
   readonly validateLedgerEntryBody: RequestHandler;
+  readonly validateCustomerParams: RequestHandler;
+  readonly validateCustomerLedgerParams: RequestHandler;
   /**
    * The ledger write, or `null` where booking entries is switched off — in
    * production, always. A route that is not mounted cannot be misused.
@@ -140,7 +142,38 @@ function bankAppRouter(dependencies: SandboxBankRouteDependencies): Router {
       dependencies.validateLedgerEntryBody,
       dependencies.app.recordLedgerEntry,
     );
+
+    customerLedgerRoutes(router, dependencies, dependencies.ledgerWriteRateLimits);
   }
 
   return router;
+}
+
+/**
+ * The demonstration console books for somebody else, named by id in the path:
+ * the presenter types a movement and the other person's screen updates. Same
+ * switch as the self-service write — never mounted in production.
+ */
+function customerLedgerRoutes(
+  router: Router,
+  dependencies: SandboxBankRouteDependencies,
+  rateLimits: readonly RequestHandler[],
+): void {
+  router.get(
+    `${BANK_APP_PREFIX}/customers/:customerId/accounts`,
+    internalErrorMessage(SANDBOX_BANK_MESSAGES.authorisationUnavailable),
+    dependencies.requireSession,
+    dependencies.validateCustomerParams,
+    dependencies.app.listBookableAccounts,
+  );
+
+  router.post(
+    `${BANK_APP_PREFIX}/customers/:customerId/accounts/:accountId/ledger-entries`,
+    internalErrorMessage(SANDBOX_BANK_MESSAGES.ledgerUnavailable),
+    dependencies.requireSession,
+    ...rateLimits,
+    dependencies.validateCustomerLedgerParams,
+    dependencies.validateLedgerEntryBody,
+    dependencies.app.recordLedgerEntryFor,
+  );
 }

@@ -33,6 +33,15 @@ export class PrismaConsentRepository implements ConsentRepository {
     return row === null ? null : ConsentMapper.toDomain(row);
   }
 
+  async findByExternalConsentId(externalConsentId: string): Promise<Consent | null> {
+    const row = await this.client.consent.findFirst({
+      where: { externalConsentId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return row === null ? null : ConsentMapper.toDomain(row);
+  }
+
   async findLatestByUserId(userId: UniqueEntityId): Promise<Consent | null> {
     const row = await this.client.consent.findFirst({
       where: { userId: userId.value },

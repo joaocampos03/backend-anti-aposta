@@ -28,6 +28,10 @@ import {
   sandboxBankRoutes,
   type SandboxBankRouteDependencies,
 } from '@modules/sandbox-bank/http/sandbox-bank.routes.js';
+import {
+  notificationsRoutes,
+  type NotificationsRouteDependencies,
+} from '@modules/notifications/http/notifications.routes.js';
 
 const API_PREFIX = '/api/v1';
 /**
@@ -51,6 +55,7 @@ export interface AppDependencies {
   readonly betDetection: BetDetectionRouteDependencies;
   readonly awareness: AwarenessRouteDependencies;
   readonly sandboxBank: SandboxBankRouteDependencies;
+  readonly notifications: NotificationsRouteDependencies;
 }
 
 /** Middleware order is part of the contract, and the funnel is always last. */
@@ -71,6 +76,7 @@ export function createApp(dependencies: AppDependencies): Express {
   app.use(API_PREFIX, openFinanceRoutes(dependencies.openFinance));
   app.use(API_PREFIX, betDetectionRoutes(dependencies.betDetection));
   app.use(API_PREFIX, awarenessRoutes(dependencies.awareness));
+  app.use(API_PREFIX, notificationsRoutes(dependencies.notifications));
   app.use(SANDBOX_PREFIX, sandboxBankRoutes(dependencies.sandboxBank));
 
   app.use(notFound);

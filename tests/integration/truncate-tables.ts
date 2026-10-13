@@ -13,6 +13,7 @@ const TABLES = [
   'gamification_badges',
   'gamification_badge_collections',
   'gamification_streaks',
+  'notifications_notifications',
   'notifications_inboxes',
   'open_finance_authorisation_requests',
   'open_finance_consent_tokens',

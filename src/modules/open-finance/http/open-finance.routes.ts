@@ -1,10 +1,15 @@
 import { Router, type RequestHandler } from 'express';
 import { internalErrorMessage } from '@shared/http/internal-error-message.js';
 import { OPEN_FINANCE_MESSAGES } from '../application/open-finance.messages.js';
+import type { DataHolderNoticeController } from './data-holder-notice.controller.js';
 import type { OpenFinanceController } from './open-finance.controller.js';
 
 export interface OpenFinanceRouteDependencies {
   readonly controller: OpenFinanceController;
+  readonly noticeController: DataHolderNoticeController;
+  /** HTTP Basic with the enrolment's credentials: the stand-in for the ecosystem's mTLS. */
+  readonly requireDataHolder: RequestHandler;
+  readonly validateDataHolderNotice: RequestHandler;
   readonly requireSession: RequestHandler;
   readonly validateListTransactionsQuery: RequestHandler;
   readonly validateMonthlySummaryQuery: RequestHandler;
@@ -42,6 +47,16 @@ export function openFinanceRoutes(dependencies: OpenFinanceRouteDependencies): R
   );
 
   consentRoutes(router, dependencies);
+
+  // The institution calls this, not a person: no session, its own credentials,
+  // and no rate limit of ours — synchronising twice ingests nothing new.
+  router.post(
+    '/data-holder-notices',
+    internalErrorMessage(OPEN_FINANCE_MESSAGES.synchronisationUnavailable),
+    dependencies.requireDataHolder,
+    dependencies.validateDataHolderNotice,
+    dependencies.noticeController.receive,
+  );
 
   return router;
 }

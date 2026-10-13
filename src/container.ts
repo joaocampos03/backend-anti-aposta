@@ -59,6 +59,7 @@ import {
   PurgeUserFinancialData,
   SummariseSpendByMonth,
   TransactionAmountLookup,
+  TransactionsIngested,
 } from '@modules/open-finance/index.js';
 import { CompleteAuthorisation } from '@modules/open-finance/application/complete-authorisation.use-case.js';
 import { ConsentAccessTokens } from '@modules/open-finance/application/consent-access-tokens.js';
@@ -85,9 +86,13 @@ import {
   type DataHolderConnection,
 } from '@modules/open-finance/infrastructure/sandbox-bank-data-holder.js';
 import { OpenFinanceController } from '@modules/open-finance/http/open-finance.controller.js';
+import { DataHolderNoticeController } from '@modules/open-finance/http/data-holder-notice.controller.js';
+import { requireDataHolder } from '@modules/open-finance/http/data-holder-authentication.js';
+import { SynchroniseNotifiedConsent } from '@modules/open-finance/application/synchronise-notified-consent.use-case.js';
 import {
   authorisationCallbackBodySchema,
   consentParamsSchema,
+  dataHolderNoticeBodySchema,
   listTransactionsQuerySchema,
   monthlySummaryQuerySchema,
 } from '@modules/open-finance/http/open-finance.schemas.js';
@@ -99,6 +104,7 @@ import { DecideAuthorisation } from '@modules/sandbox-bank/application/decide-au
 import { DemoAccountOpening } from '@modules/sandbox-bank/application/demo-account-opening.js';
 import { DescribeAuthorisationRequest } from '@modules/sandbox-bank/application/describe-authorisation-request.use-case.js';
 import { IssueToken } from '@modules/sandbox-bank/application/issue-token.use-case.js';
+import { ListBookableAccounts } from '@modules/sandbox-bank/application/list-bookable-accounts.use-case.js';
 import { ListCustomerAccounts } from '@modules/sandbox-bank/application/list-customer-accounts.use-case.js';
 import { ListSharedAccounts } from '@modules/sandbox-bank/application/list-shared-accounts.use-case.js';
 import { ListSharedTransactions } from '@modules/sandbox-bank/application/list-shared-transactions.use-case.js';
@@ -110,6 +116,7 @@ import { SANDBOX_BANK_MESSAGES } from '@modules/sandbox-bank/application/sandbox
 import { TokenIssuance } from '@modules/sandbox-bank/application/token-issuance.js';
 import { ConfiguredClientRegistry } from '@modules/sandbox-bank/infrastructure/configured-client-registry.js';
 import { CryptoBankSecrets } from '@modules/sandbox-bank/infrastructure/crypto-bank-secrets.js';
+import { HttpDataRecipientNotifier } from '@modules/sandbox-bank/infrastructure/http-data-recipient-notifier.js';
 import { PrismaAuthorisationCodeRepository } from '@modules/sandbox-bank/infrastructure/prisma-authorisation-code.repository.js';
 import { PrismaBankAccountRepository } from '@modules/sandbox-bank/infrastructure/prisma-bank-account.repository.js';
 import { PrismaIssuedTokenRepository } from '@modules/sandbox-bank/infrastructure/prisma-issued-token.repository.js';
@@ -124,7 +131,10 @@ import {
   authorisationQuerySchema,
   consentParamsSchema as sandboxConsentParamsSchema,
   createConsentBodySchema,
+  CONSENT_URN_PREFIX,
   customerAccountParamsSchema,
+  customerLedgerParamsSchema,
+  customerParamsSchema,
   ledgerEntryBodySchema,
   sharedAccountParamsSchema,
   sharedTransactionsQuerySchema,
@@ -132,8 +142,22 @@ import {
 } from '@modules/sandbox-bank/http/sandbox-bank.schemas.js';
 import type { SandboxBankRouteDependencies } from '@modules/sandbox-bank/http/sandbox-bank.routes.js';
 import { SessionCallerResolver } from '@modules/identity/http/session-caller-resolver.js';
-import { CreateInbox } from '@modules/notifications/index.js';
+import { AnnounceIngestedTransactions, CreateInbox } from '@modules/notifications/index.js';
+import { NotificationDelivery } from '@modules/notifications/application/notification-delivery.js';
+import { NOTIFICATIONS_MESSAGES } from '@modules/notifications/application/notifications.messages.js';
+import { notificationsFailures } from '@modules/notifications/application/notifications.failures.js';
+import { ReplayNotifications } from '@modules/notifications/application/replay-notifications.use-case.js';
+import { SendDemoNotification } from '@modules/notifications/application/send-demo-notification.use-case.js';
+import { AwarenessYieldCalculator as NotificationsYieldCalculator } from '@modules/notifications/infrastructure/awareness-yield-calculator.js';
+import { InProcessNotificationStream } from '@modules/notifications/infrastructure/in-process-notification-stream.js';
 import { PrismaInboxRepository } from '@modules/notifications/infrastructure/prisma-inbox.repository.js';
+import { PrismaNotificationRepository } from '@modules/notifications/infrastructure/prisma-notification.repository.js';
+import { NotificationsController } from '@modules/notifications/http/notifications.controller.js';
+import {
+  demoNotificationBodySchema,
+  recipientParamsSchema,
+} from '@modules/notifications/http/notifications.schemas.js';
+import type { NotificationsRouteDependencies } from '@modules/notifications/http/notifications.routes.js';
 import { PrismaBadgeCollectionRepository } from '@modules/gamification/infrastructure/prisma-badge-collection.repository.js';
 import { PrismaStreakRepository } from '@modules/gamification/infrastructure/prisma-streak.repository.js';
 import { AuthorisedConsentQuery } from '@modules/open-finance/index.js';
@@ -164,6 +188,8 @@ export interface ContainerSettings {
   readonly passwordResetAttemptsPerHour: number;
   readonly consentCommandsPerHour: number;
   readonly sandboxLedgerEntriesPerHour: number;
+  /** The demonstration console's sends, so a script cannot flood somebody's screen. */
+  readonly demoNotificationsPerHour: number;
 }
 
 /** This platform as a DataRecipient: its key for tokens at rest, and its enrolment. */
@@ -260,6 +286,19 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     events: eventBus,
   });
 
+  // notifications: stored first, then pushed to whichever streams the
+  // recipient has open. The stream and the delivery share one fan-out.
+  const inboxes = new PrismaInboxRepository(input.prisma);
+  const notificationRecords = new PrismaNotificationRepository(input.prisma);
+  const notificationStream = new InProcessNotificationStream();
+  const notificationDelivery = new NotificationDelivery({
+    inboxes,
+    notifications: notificationRecords,
+    channel: notificationStream,
+    idGenerator,
+    clock,
+  });
+
   subscribeToRegistration({
     eventBus,
     startStreak: new StartStreak(new PrismaStreakRepository(input.prisma), idGenerator, clock),
@@ -268,7 +307,7 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       idGenerator,
       clock,
     ),
-    createInbox: new CreateInbox(new PrismaInboxRepository(input.prisma), idGenerator, clock),
+    createInbox: new CreateInbox(inboxes, idGenerator, clock),
   });
 
   // ---------------------------------------------------------------------
@@ -396,6 +435,22 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     forgetClassifications: new ForgetUserClassifications(classifications),
   });
 
+  subscribeToIngestion({
+    eventBus,
+    announceIngestedTransactions: new AnnounceIngestedTransactions(notificationDelivery),
+  });
+
+  const synchroniseNotifiedConsent = new SynchroniseNotifiedConsent(
+    consents,
+    new ConsentAccessTokens(tokenVault, dataHolder),
+    statementSynchronisation,
+    clock,
+  );
+  const dataHolderNotice = validateBody(
+    dataHolderNoticeBodySchema,
+    openFinanceFailures.dataHolderNoticeInvalid,
+  );
+
   const queries = {
     listTransactions: validateQuery(
       listTransactionsQuerySchema,
@@ -494,6 +549,12 @@ export function buildContainer(input: ContainerInput): AppDependencies {
           authorisationCallback: queries.authorisationCallback,
         },
       ),
+      noticeController: new DataHolderNoticeController(synchroniseNotifiedConsent, dataHolderNotice),
+      requireDataHolder: requireDataHolder({
+        clientId: input.openFinance.dataHolder.clientId,
+        clientSecret: input.openFinance.dataHolder.clientSecret,
+      }),
+      validateDataHolderNotice: dataHolderNotice.middleware,
       requireSession: sessionGuard,
       validateListTransactionsQuery: queries.listTransactions.middleware,
       validateMonthlySummaryQuery: queries.monthlySummary.middleware,
@@ -532,6 +593,62 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       controller: new AwarenessController(evaluateSupportOffer),
       requireSession: sessionGuard,
     },
+    notifications: buildNotifications({
+      input,
+      delivery: notificationDelivery,
+      stream: notificationStream,
+      notifications: notificationRecords,
+      yields: new NotificationsYieldCalculator(reframing),
+      sessionGuard,
+    }),
+  };
+}
+
+interface NotificationsWiring {
+  readonly input: ContainerInput;
+  readonly delivery: NotificationDelivery;
+  readonly stream: InProcessNotificationStream;
+  readonly notifications: PrismaNotificationRepository;
+  readonly yields: NotificationsYieldCalculator;
+  readonly sessionGuard: RequestHandler;
+}
+
+/**
+ * The stream is always there. The console that sends to a person by id rides
+ * on the same switch as the sandbox's ledger writes: a demonstration tool,
+ * never mounted in production.
+ */
+function buildNotifications(wiring: NotificationsWiring): NotificationsRouteDependencies {
+  const inputs = {
+    recipientParams: validateParams(recipientParamsSchema, notificationsFailures.validationFailed),
+    demoNotificationBody: validateBody(
+      demoNotificationBodySchema,
+      notificationsFailures.validationFailed,
+    ),
+  };
+
+  return {
+    controller: new NotificationsController(
+      {
+        replayNotifications: new ReplayNotifications(wiring.notifications),
+        sendDemoNotification: new SendDemoNotification(wiring.delivery, wiring.yields),
+      },
+      inputs,
+      wiring.stream,
+    ),
+    requireSession: wiring.sessionGuard,
+    validateRecipientParams: inputs.recipientParams.middleware,
+    validateDemoNotificationBody: inputs.demoNotificationBody.middleware,
+    demoRateLimits: wiring.input.sandboxBank.ledgerWritesEnabled
+      ? [
+          windowedRateLimit({
+            code: 'TOO_MANY_ATTEMPTS',
+            message: NOTIFICATIONS_MESSAGES.tooManyDemoNotifications,
+            limit: wiring.input.settings.demoNotificationsPerHour,
+            windowInMinutes: MINUTES_IN_AN_HOUR,
+          }),
+        ]
+      : null,
   };
 }
 
@@ -591,6 +708,11 @@ function buildSandboxBank({
       sandboxBankFailures.validationFailed,
     ),
     ledgerEntryBody: validateBody(ledgerEntryBodySchema, sandboxBankFailures.validationFailed),
+    customerParams: validateParams(customerParamsSchema, sandboxBankFailures.validationFailed),
+    customerLedgerParams: validateParams(
+      customerLedgerParamsSchema,
+      sandboxBankFailures.validationFailed,
+    ),
   };
 
   const protocol = new SandboxBankProtocolController(
@@ -626,7 +748,19 @@ function buildSandboxBank({
         clock,
       }),
       listCustomerAccounts: new ListCustomerAccounts(demoAccounts, clock),
-      recordLedgerEntry: new RecordLedgerEntry(accounts, ledger, idGenerator, clock),
+      recordLedgerEntry: new RecordLedgerEntry({
+        accounts,
+        ledger,
+        consents,
+        clients,
+        notifier: new HttpDataRecipientNotifier(
+          { consentUrnPrefix: CONSENT_URN_PREFIX, clientSecret: input.sandboxBank.clientSecret },
+          input.logger,
+        ),
+        idGenerator,
+        clock,
+      }),
+      listBookableAccounts: new ListBookableAccounts(accounts),
     },
     inputs,
   );
@@ -647,6 +781,8 @@ function buildSandboxBank({
     validateAuthorisationDecision: inputs.authorisationDecision.middleware,
     validateCustomerAccountParams: inputs.customerAccountParams.middleware,
     validateLedgerEntryBody: inputs.ledgerEntryBody.middleware,
+    validateCustomerParams: inputs.customerParams.middleware,
+    validateCustomerLedgerParams: inputs.customerLedgerParams.middleware,
     ledgerWriteRateLimits: input.sandboxBank.ledgerWritesEnabled
       ? [
           windowedRateLimit({
@@ -744,5 +880,29 @@ function subscribeToRevocation(subscribers: RevocationSubscribers): void {
 
     await subscribers.purgeFinancialData.execute({ userId: event.payload.userId });
     await subscribers.forgetClassifications.execute({ userId: event.payload.userId });
+  });
+}
+
+interface IngestionSubscribers {
+  readonly eventBus: InProcessEventBus;
+  readonly announceIngestedTransactions: AnnounceIngestedTransactions;
+}
+
+/**
+ * New movements reached the statement — after the button, after the first
+ * synchronisation of a consent, or after the institution's notice — so the
+ * person's open screens are told to read it again. A count travels, never a
+ * movement: the statement says what they were, behind the session.
+ */
+function subscribeToIngestion(subscribers: IngestionSubscribers): void {
+  subscribers.eventBus.subscribe(TransactionsIngested.NAME, async (event) => {
+    if (!(event instanceof TransactionsIngested)) {
+      return;
+    }
+
+    await subscribers.announceIngestedTransactions.execute({
+      userId: event.payload.userId,
+      ingestedCount: event.payload.transactionIds.length,
+    });
   });
 }
