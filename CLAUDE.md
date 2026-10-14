@@ -68,8 +68,9 @@ import that climbs more than one level.
 ## Layout
 
 ```
+server.js                        # Vercel's entrypoint only: loads the compiled dist/server.js
 src/
-  server.ts                      # process entry: validate env, build container, listen (Vercel's entrypoint)
+  server.ts                      # process entry: validate env, build container, listen
   create-app.ts                  # Express app assembly (middleware order, routers, error funnel)
   container.ts                   # composition root — the ONLY file wiring ports to adapters
   modules/<context>/
