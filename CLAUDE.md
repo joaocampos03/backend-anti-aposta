@@ -69,8 +69,8 @@ import that climbs more than one level.
 
 ```
 src/
-  server.ts                      # process entry: validate env, build container, listen
-  app.ts                         # Express app assembly (middleware order, routers, error funnel)
+  server.ts                      # process entry: validate env, build container, listen (Vercel's entrypoint)
+  create-app.ts                  # Express app assembly (middleware order, routers, error funnel)
   container.ts                   # composition root — the ONLY file wiring ports to adapters
   modules/<context>/
     domain/
@@ -193,7 +193,7 @@ never an aggregate instance, never a Prisma row.
 
 ## HTTP conventions
 
-Middleware order in `app.ts`, and it matters: `helmet` → `cors` → `request-id` → `pino-http` →
+Middleware order in `create-app.ts`, and it matters: `helmet` → `cors` → `request-id` → `pino-http` →
 JSON body parser (100 kb limit) → cookie parser → rate limit → `/api/v1` routers → 404 handler →
 error funnel (last).
 

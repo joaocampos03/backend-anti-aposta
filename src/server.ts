@@ -1,11 +1,18 @@
-import { createApp } from './app.js';
+import type { Express } from 'express';
+import { createApp } from './create-app.js';
 import { buildContainer } from './container.js';
 import { env, sandboxLedgerWritesEnabled } from '@shared/infrastructure/env.js';
 import { logger } from '@shared/infrastructure/logger.js';
 import { prisma } from '@shared/infrastructure/prisma.js';
 
-/** Process entry: the environment is already validated by importing `env`. */
-const app = createApp(
+/**
+ * Process entry: the environment is already validated by importing `env`.
+ *
+ * Also Vercel's entrypoint. Vercel picks the first of `src/app`, `src/index`,
+ * `src/server` that imports `express`, so the assembly is `create-app.ts` and
+ * not `app.ts`, and the `Express` import here is what Vercel looks for.
+ */
+const app: Express = createApp(
   buildContainer({
     prisma,
     logger,
