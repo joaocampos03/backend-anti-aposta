@@ -34,7 +34,7 @@ export default typescriptEslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['eslint.config.js'] },
+        projectService: { allowDefaultProject: ['eslint.config.js', 'server.js'] },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -82,7 +82,7 @@ export default typescriptEslint.config(
   {
     // The composition root is the one file allowed to reach into a module to
     // wire a port to an adapter, and the only one that knows every context.
-    files: ['src/container.ts', 'src/app.ts'],
+    files: ['src/container.ts', 'src/create-app.ts'],
     rules: { 'no-restricted-imports': 'off' },
   },
   {
