@@ -150,3 +150,6 @@ prompts/
 # until then, README.md and CLAUDE.md both tell you to run
 # `docker compose up -d postgres`, which needs this file present on disk.
 docker-compose.yml
+
+# Vercel CLI project link and local build output
+.vercel

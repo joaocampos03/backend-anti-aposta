@@ -39,7 +39,7 @@ and `crypto.randomUUID()` in a use case are bugs — ESLint fails the first one 
 
 ## `shared/http` — middleware, and nothing with business meaning
 
-Order in `src/app.ts` matters: `helmet` → `cors` → `request-id` → `pino-http` → JSON body (100 kb)
+Order in `src/create-app.ts` matters: `helmet` → `cors` → `request-id` → `pino-http` → JSON body (100 kb)
 → `cookie-parser` → routers under `/api/v1` → `notFound` → `errorHandler` **last**. Route-level
 rate limits are mounted by the router that needs them, which is where the threshold is a property
 of the endpoint rather than of the whole API.

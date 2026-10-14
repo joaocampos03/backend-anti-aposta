@@ -170,7 +170,7 @@ import { windowedRateLimit } from '@shared/http/rate-limit.js';
 import { Calendar } from '@shared/domain/calendar.js';
 import { requireSession } from '@shared/http/require-session.js';
 import { validateBody, validateParams, validateQuery } from '@shared/http/validate.js';
-import type { AppDependencies } from './app.js';
+import type { AppDependencies } from './create-app.js';
 
 const MINUTES_IN_AN_HOUR = 60;
 const MINUTES_IN_A_QUARTER_HOUR = 15;
