@@ -20,4 +20,11 @@ export const betDetectionFailures = {
 
   validationFailed: (details: AppErrorDetails): AppError =>
     new AppError('VALIDATION_FAILED', BET_DETECTION_MESSAGES.validationFailed, 422, details),
+
+  /**
+   * The screen normalises its own `?period=` before calling, so this is a
+   * frontend bug rather than something a person typed.
+   */
+  betsPeriodInvalid: (details: AppErrorDetails): AppError =>
+    new AppError('VALIDATION_FAILED', BET_DETECTION_MESSAGES.betsPeriodInvalid, 422, details),
 } as const;

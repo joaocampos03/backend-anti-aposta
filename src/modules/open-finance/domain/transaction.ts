@@ -32,6 +32,13 @@ export interface BetMark {
   readonly matchedBy: BetMarkReason;
   readonly confidence: BetMarkConfidence;
   readonly source: BetMarkSource;
+  /**
+   * Which house the row belongs to, as `bet-detection` grouped it. An opaque
+   * string this context stores and filters by, and never interprets: the
+   * grouping rule is that context's, and the registration number behind it
+   * never leaves it.
+   */
+  readonly bookmakerId: string | null;
 }
 
 interface TransactionProperties {

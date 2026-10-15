@@ -51,6 +51,7 @@ function anEntry(externalId: string, overrides: Partial<SharedTransaction> = {})
     status: 'SETTLED',
     merchantCategoryCode: null,
     counterpartyDocument: '11222333000181',
+    isAccountToAccountTransfer: false,
     ...overrides,
   };
 }

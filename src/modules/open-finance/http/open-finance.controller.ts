@@ -126,6 +126,7 @@ export class OpenFinanceController {
       type: query.type,
       period: query.period,
       accountId: query.accountId ?? null,
+      bookmakerId: query.bookmakerId ?? null,
       search: query.q ?? null,
       limit: query.limit,
       cursor: query.cursor ?? null,

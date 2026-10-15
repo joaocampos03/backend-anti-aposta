@@ -8,8 +8,8 @@
 | `gamification`  | Bootstrap only: `Streak` at zero days and an empty `BadgeCollection` on `UserRegistered`. No scoring, no awarding yet. |
 | `notifications` | **Implemented**: `Inbox` and `Notification`, persisted and pushed per user over SSE (`GET /notifications/stream`, replay by `Last-Event-ID`); announces `TransactionsIngested`; a demo-only console that sends to a user by id. Nudges and badges arrive from their own features. |
 | `open-finance`  | **Implemented**: `Consent`, `AuthorisationRequest`, `ConnectedAccount`, `Transaction`; the OAuth 2.0 + PKCE client against the DataHolder, synchronisation over HTTP, revocation; the statement and the charts as read models. |
-| `bet-detection` | **Implemented**: the three-policy chain, `Bookmaker`, `TransactionClassification` and the correction. The only context that may read a raw statement line. |
-| `awareness`     | **Implemented**: `YieldEquivalent` (the compound-interest service and the rate) and `SupportOffer`. Nudges arrive with their own feature. |
+| `bet-detection` | **Implemented**: the three-policy chain, `Bookmaker`, `TransactionClassification` and the correction; `BookmakerIdentity` and the betting summary (`GET /bets/summary`), which it composes from the other two contexts. The only context that may read a raw statement line, and the only one that knows a CNPJ. |
+| `awareness`     | **Implemented**: `YieldEquivalent` (the compound-interest service and the rate), `SupportOffer`, and the equivalence catalogue (`ReferenceItem`, `SpendingEquivalence`). Nudges arrive with their own feature. |
 | `sandbox-bank`  | **Implemented**: the simulated DataHolder — `BankAccount`, `LedgerEntry`, its own `Consent`, `AuthorisationCode`, `IssuedToken`; the Open Finance surface under `/sandbox`; a "resources changed" notice to the DataRecipient over HTTP after a booking. A foreign system: nothing imports it. |
 
 ## The rules that get broken most
@@ -75,11 +75,21 @@ open-finance.RevokeConsent
 ```
 
 **The projection is the load-bearing part of the statement.** `open-finance`
-keeps a copy of `bet-detection`'s verdict on its own row, so the ledger can
-filter `type=BETS` and total it in one query rather than joining across a
-context boundary. The subscriber **re-reads** the owning context rather than
-trusting the payload — the events carry ids only, which is what stops a
-financial judgement travelling through the bus.
+keeps a copy of `bet-detection`'s verdict **and its bookmaker grouping** on its
+own row, so the ledger can filter `type=BETS` or `bookmakerId=…` and total it in
+one query rather than joining across a context boundary. The subscriber
+**re-reads** the owning context rather than trusting the payload — the events
+carry ids only, which is what stops a financial judgement travelling through the
+bus.
+
+**The betting screen is read the other way round.** `bet-detection` owns
+`GET /bets/summary` and composes the other two contexts through their public
+APIs — the amounts, the instants and the income from `open-finance`
+(`SyncStatusLookup`, `PrismaBettingWindowQuery`), the rate and the equivalence
+catalogue from `awareness` (`DescribeEquivalences`). Three read-only queries
+across two boundaries, each through a port in the caller and an adapter in its
+`infrastructure/`. Nothing is written, nothing is joined, and the figures match
+the statement's because both read the same projected columns.
 
 The last three have no subscribers: they are recorded for audit. **Nothing is ever pushed to the
 notification stream for a sign-in** — a "novo acesso" alert belongs to a bank, not to a product

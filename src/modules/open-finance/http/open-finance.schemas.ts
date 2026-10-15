@@ -4,6 +4,8 @@ const SEARCH_MAXIMUM_LENGTH = 120;
 const DEFAULT_LIMIT = 50;
 const MAXIMUM_LIMIT = 100;
 const MAXIMUM_MONTHS = 12;
+/** The column that holds it. */
+const BOOKMAKER_ID_MAXIMUM_LENGTH = 64;
 
 /**
  * An opaque cursor over `(occurredAt, id)`. Opaque on purpose: a client that
@@ -58,8 +60,17 @@ const cursorSchema = z
 
 export const listTransactionsQuerySchema = z.object({
   type: z.enum(['ALL', 'BETS', 'CREDITS', 'DEBITS']).default('ALL'),
-  period: z.enum(['LAST_30_DAYS', 'LAST_90_DAYS', 'ALL_TIME']).default('LAST_30_DAYS'),
+  period: z
+    .enum(['LAST_30_DAYS', 'LAST_90_DAYS', 'LAST_180_DAYS', 'LAST_360_DAYS', 'ALL_TIME'])
+    .default('LAST_30_DAYS'),
   accountId: z.string().uuid().optional(),
+  /**
+   * Opaque, and not a UUID: an unregistered house's id is derived from its
+   * name. A length bound is all the shape there is to check — whether the id
+   * means anything is a question for this reader's own history, which answers
+   * 404 rather than 422.
+   */
+  bookmakerId: z.string().trim().min(1).max(BOOKMAKER_ID_MAXIMUM_LENGTH).optional(),
   q: z.string().trim().max(SEARCH_MAXIMUM_LENGTH).optional(),
   limit: z.coerce.number().int().min(1).max(MAXIMUM_LIMIT).default(DEFAULT_LIMIT),
   cursor: cursorSchema,

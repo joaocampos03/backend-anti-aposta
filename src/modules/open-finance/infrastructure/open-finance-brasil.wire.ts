@@ -156,6 +156,7 @@ export function toSharedTransaction(
     merchantCategoryCode:
       wire.merchantCategoryCode === undefined ? null : Number(wire.merchantCategoryCode),
     counterpartyDocument: wire.payeeDocument ?? null,
+    isAccountToAccountTransfer: wire.type === 'TRANSFERENCIA_MESMA_INSTITUICAO',
   };
 }
 

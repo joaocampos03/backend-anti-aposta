@@ -59,6 +59,37 @@ const BOOKMAKERS: readonly { readonly tradeName: string; readonly document: stri
   { tradeName: 'Gaivota Sports', document: '77888999000163' },
 ];
 
+/**
+ * The equivalence catalogue: what a betting total is divided into so an amount
+ * becomes something a person recognises.
+ *
+ * These are **rounded estimates chosen to make an amount legible**, not
+ * researched figures, which is what `source` says and what the screen labels
+ * them as. The R$ 800 cesta básica is high for most capitals; it is a
+ * placeholder, not a claim. Every row carries the day it was last looked at,
+ * because a stale price makes the whole card look careless — and a price can be
+ * corrected here with no deploy.
+ */
+const REFERENCE_ITEMS: readonly {
+  readonly id: string;
+  readonly singular: string;
+  readonly plural: string;
+  readonly unitPriceInCents: number;
+}[] = [
+  { id: 'carro-popular', singular: 'carro popular usado', plural: 'carros populares usados', unitPriceInCents: 3_500_000 },
+  { id: 'moto', singular: 'moto 0 km', plural: 'motos 0 km', unitPriceInCents: 1_800_000 },
+  { id: 'semestre-faculdade', singular: 'semestre de faculdade', plural: 'semestres de faculdade', unitPriceInCents: 450_000 },
+  { id: 'notebook', singular: 'notebook', plural: 'notebooks', unitPriceInCents: 250_000 },
+  { id: 'maquina-de-lavar', singular: 'máquina de lavar', plural: 'máquinas de lavar', unitPriceInCents: 200_000 },
+  { id: 'celular', singular: 'celular', plural: 'celulares', unitPriceInCents: 180_000 },
+  { id: 'bicicleta', singular: 'bicicleta', plural: 'bicicletas', unitPriceInCents: 120_000 },
+  { id: 'passagem', singular: 'passagem aérea', plural: 'passagens aéreas', unitPriceInCents: 90_000 },
+  { id: 'cesta-basica', singular: 'cesta básica', plural: 'cestas básicas', unitPriceInCents: 80_000 },
+];
+
+const REFERENCE_PRICE_SOURCE = 'Estimativa arredondada para a demonstração';
+const REFERENCE_PRICE_REVIEWED_AT = '2026-10-01';
+
 const clock = new SystemClock();
 const calendar = new Calendar('America/Sao_Paulo');
 const idGenerator = new UuidV7IdGenerator(clock);
@@ -145,7 +176,14 @@ function betSignalledBy(
   document: string | null,
 ): Entry {
   if (policy === 0) {
-    return entry('CARD', when, amountInCents, tradeName, { merchantCategoryCode: 7995 });
+    // The card payment carries the operator's registration number as well as
+    // the MCC, which is what the real protocol sends. Without it the registry
+    // cannot be consulted, and the same house would appear twice in the
+    // ranking — once by its registry name and once by its statement line.
+    return entry('CARD', when, amountInCents, tradeName, {
+      merchantCategoryCode: 7995,
+      payeeDocument: document,
+    });
   }
 
   if (policy === 1) {
@@ -163,15 +201,19 @@ function buildHistory(): readonly Entry[] {
     history.push(...ordinaryMonth(monthsAgo), ...bettingMonth(monthsAgo));
   }
 
-  // The two cases the product has to get right and nothing else produces: a
+  // The three cases the product has to get right and nothing else produces: a
   // bookmaker refund, which nets off the betting total rather than inflating
-  // it, and an entry booked for the future, which may yet change.
+  // it; an entry booked for the future, which may yet change; and an operator
+  // the registry has never heard of, grouped by its name alone — which is what
+  // `registryStatus: UNREGISTERED` exists to report.
   history.push(
     entry('CHECKING', at(9, 14, 20), 12000, 'ESTORNO PIX', { payeeDocument: '11222333000181' }),
     entry('CARD', at(1, 18, 5), -9990, 'Loja de departamento', {
       merchantCategoryCode: 5651,
       status: 'LANCAMENTO_FUTURO',
     }),
+    entry('CARD', at(16, 22, 36), -6200, 'Maritaca Apostas', { merchantCategoryCode: 7995 }),
+    entry('CARD', at(5, 23, 11), -4800, 'MARITACA APOSTAS*PIX', { merchantCategoryCode: 7995 }),
   );
 
   return history;
@@ -219,6 +261,26 @@ async function ensureBookmakers(): Promise<void> {
         registeredAt: clock.now(),
       },
       update: { tradeName: bookmaker.tradeName },
+    });
+  }
+}
+
+/** Configuration, like the registry above: re-seeding corrects a price in place. */
+async function ensureReferenceItems(): Promise<void> {
+  for (const item of REFERENCE_ITEMS) {
+    const row = {
+      singular: item.singular,
+      plural: item.plural,
+      unitPriceInCents: item.unitPriceInCents,
+      source: REFERENCE_PRICE_SOURCE,
+      reviewedAt: REFERENCE_PRICE_REVIEWED_AT,
+      isActive: true,
+    };
+
+    await prisma.referenceItem.upsert({
+      where: { id: item.id },
+      create: { id: item.id, ...row },
+      update: row,
     });
   }
 }
@@ -425,6 +487,7 @@ function platformClient(noticeUri: string): {
 
 async function seed(): Promise<void> {
   await ensureBookmakers();
+  await ensureReferenceItems();
 
   const userId = await ensureDemoUser();
   // Registration creates the inbox through `UserRegistered`; the demo user is

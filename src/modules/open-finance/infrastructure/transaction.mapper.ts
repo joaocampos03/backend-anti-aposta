@@ -23,6 +23,7 @@ export class TransactionMapper {
               matchedBy: row.betMatchedBy,
               confidence: row.betConfidence,
               source: row.betSource,
+              bookmakerId: row.betBookmakerId,
             },
     });
   }
@@ -45,6 +46,7 @@ export class TransactionMapper {
       betMatchedBy: mark?.matchedBy ?? null,
       betConfidence: mark?.confidence ?? null,
       betSource: mark?.source ?? null,
+      betBookmakerId: mark?.bookmakerId ?? null,
       overriddenAt: null,
     };
   }

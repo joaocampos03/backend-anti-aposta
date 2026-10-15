@@ -57,6 +57,17 @@ export class Calendar {
     return `${padded(year, 4)}-${padded(month)}`;
   }
 
+  /**
+   * The hour of the day, 0 to 23, as a clock in this timezone reads it.
+   *
+   * A bet placed at 23:30 in São Paulo belongs to the 21h band. Reading the
+   * hour off the server's own clock moves it to 00h whenever the process runs
+   * in UTC, which is every deployment of this API.
+   */
+  hourOf(instant: Date): number {
+    return this.partsOf(instant).hour;
+  }
+
   /** The instant at which the given local day begins. */
   startOfDay(dayKey: DayKey): Date {
     const [year = 0, month = 1, day = 1] = dayKey.split('-').map(Number);

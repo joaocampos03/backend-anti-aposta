@@ -48,8 +48,6 @@ export class PrismaBookmakerRepository implements BookmakerRepository, Bookmaker
 
   /** Resolved fresh on every run, so an undone correction sees today's registry. */
   async current(): Promise<BookmakerRegistry> {
-    const bookmakers = await this.findAllRegistered();
-
-    return BookmakerRegistry.of(bookmakers.map((bookmaker) => bookmaker.document));
+    return BookmakerRegistry.of(await this.findAllRegistered());
   }
 }

@@ -12,6 +12,10 @@ export const openFinanceFailures = {
   accountNotFound: (): AppError =>
     new AppError('ACCOUNT_NOT_FOUND', OPEN_FINANCE_MESSAGES.accountNotFound, 404),
 
+  /** Same answer as an id that never existed: 404, never 403. */
+  bookmakerNotFound: (): AppError =>
+    new AppError('BOOKMAKER_NOT_FOUND', OPEN_FINANCE_MESSAGES.bookmakerNotFound, 404),
+
   transactionsFilterInvalid: (details: AppErrorDetails): AppError =>
     new AppError('VALIDATION_FAILED', OPEN_FINANCE_MESSAGES.transactionsFilterInvalid, 422, details),
 

@@ -8,6 +8,7 @@ export interface BetDetectionRouteDependencies {
   readonly requireSession: RequestHandler;
   readonly validateTransactionIdParams: RequestHandler;
   readonly validateOverrideBody: RequestHandler;
+  readonly validateBetSummaryQuery: RequestHandler;
   /** So a script cannot rewrite a history through this endpoint. */
   readonly overrideRateLimits: readonly RequestHandler[];
 }
@@ -19,6 +20,17 @@ export interface BetDetectionRouteDependencies {
  */
 export function betDetectionRoutes(dependencies: BetDetectionRouteDependencies): Router {
   const router = Router();
+
+  // Everything the betting screen shows, for one window. No consent and no bets
+  // are both successful states: an error page in front of somebody who simply
+  // has not connected an account would be the wrong screen for the wrong reason.
+  router.get(
+    '/bets/summary',
+    internalErrorMessage(BET_DETECTION_MESSAGES.betsUnavailable),
+    dependencies.requireSession,
+    dependencies.validateBetSummaryQuery,
+    dependencies.controller.summary,
+  );
 
   router.post(
     '/transactions/:transactionId/classification-override',

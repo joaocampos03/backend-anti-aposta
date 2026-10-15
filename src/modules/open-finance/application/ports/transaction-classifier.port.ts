@@ -14,5 +14,11 @@ export interface TransactionClassifier {
     readonly merchantCategoryCode: number | null;
     readonly counterpartyDocument: string | null;
     readonly statementLine: string;
+    /**
+     * The normalised merchant name this context derived from the line. It is
+     * not a policy input: it is what `bet-detection` groups a house by when the
+     * registry has no entry for its registration number.
+     */
+    readonly counterparty: string;
   }): Promise<void>;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
 import { BookmakerRegistry } from './bookmaker-registry.js';
 import { Cnpj } from './cnpj.js';
 import { DetectionPolicyChain } from './detection-policy-chain.js';
@@ -18,7 +19,13 @@ function aCnpj(digits: string): Cnpj {
 }
 
 const CHAIN = DetectionPolicyChain.standard(
-  BookmakerRegistry.of([aCnpj(BOOKMAKER_DOCUMENT)]),
+  BookmakerRegistry.of([
+    {
+      id: UniqueEntityId.restore('0192f3c1-7a1b-7c3e-9f20-000000000009'),
+      tradeName: 'Aposta Andorinha',
+      document: aCnpj(BOOKMAKER_DOCUMENT),
+    },
+  ]),
 );
 
 describe('DetectionPolicyChain', () => {
