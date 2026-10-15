@@ -37,4 +37,32 @@ describe('inferCategory', () => {
       'OTHER',
     );
   });
+
+  /**
+   * Payroll and an account-to-account transfer both arrive as `TRANSFER`, so
+   * the method cannot tell them apart. Money the reader moved from their own
+   * account is not money that came in, and filing it as income would inflate
+   * the denominator the betting screen states a share against.
+   */
+  it('files money moved between accounts as a transfer, not as income', () => {
+    expect(
+      inferCategory({
+        merchantCategoryCode: null,
+        isCredit: true,
+        method: 'TRANSFER',
+        isAccountToAccountTransfer: true,
+      }),
+    ).toBe('TRANSFER');
+  });
+
+  it('still files payroll as income', () => {
+    expect(
+      inferCategory({
+        merchantCategoryCode: null,
+        isCredit: true,
+        method: 'TRANSFER',
+        isAccountToAccountTransfer: false,
+      }),
+    ).toBe('INCOME');
+  });
 });

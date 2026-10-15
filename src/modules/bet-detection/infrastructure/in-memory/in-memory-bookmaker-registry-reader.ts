@@ -1,16 +1,18 @@
 import type { BookmakerRegistryReader } from '../../application/ports/bookmaker-registry-reader.port.js';
-import { BookmakerRegistry } from '../../domain/bookmaker-registry.js';
-import type { Cnpj } from '../../domain/cnpj.js';
+import {
+  BookmakerRegistry,
+  type BookmakerRegistryEntry,
+} from '../../domain/bookmaker-registry.js';
 
 export class InMemoryBookmakerRegistryReader implements BookmakerRegistryReader {
-  private documents: readonly Cnpj[] = [];
+  private entries: readonly BookmakerRegistryEntry[] = [];
 
   /** Arrange: the registry as it stands when the chain next runs. */
-  register(...documents: readonly Cnpj[]): void {
-    this.documents = [...this.documents, ...documents];
+  register(...bookmakers: readonly BookmakerRegistryEntry[]): void {
+    this.entries = [...this.entries, ...bookmakers];
   }
 
   async current(): Promise<BookmakerRegistry> {
-    return BookmakerRegistry.of(this.documents);
+    return BookmakerRegistry.of(this.entries);
   }
 }

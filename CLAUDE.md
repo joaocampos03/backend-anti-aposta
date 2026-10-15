@@ -344,6 +344,16 @@ JSON field names and column names — never invent synonyms.
 | Oferta de apoio             | `SupportOffer`    | Whether to surface support resources, and what was counted. Carries no diagnosis |
 | Origem da classificação     | `ClassificationSource` | `POLICY` or `USER_OVERRIDE` |
 | Correção de classificação   | `ClassificationOverride` | One per transaction, outranking the policy chain permanently and reversible by the same person |
+| Identificador da casa       | `BookmakerId`     | Opaque and stable, on the wire. The registry row's id when the CNPJ matches, otherwise derived from the normalised counterparty. **Never** the CNPJ |
+| Situação no cadastro        | `RegistryStatus`  | `REGISTERED` or `UNREGISTERED`: whether a grouping came from the registry or from a name. No screen shows it; the paper reports it |
+| Resumo de apostas           | `BettingSummary`  | Everything the betting screen shows for one window, computed on read |
+| Janela                      | `BetWindow`       | Whole São Paulo days ending today: `30 \| 90 \| 180 \| 360`. Days, not months — a month makes the headline jump on the first |
+| Custo com apostas           | `BettingCost`     | Net total, bets placed, houses, refunds and the first bet. Counts describe **debits**; a refund nets off the total and counts as no bet |
+| Contagem por regra          | `DetectionTally`  | Per `matchedBy`: count and integer share of bets placed |
+| Faixa de horário            | `HourBucket`      | One of eight three-hour bands, São Paulo time, carrying a count and no judgement |
+| Parcela da renda            | `IncomeShare`     | The net betting cost against `INCOME` credits over the same window. Hidden when there were none, never capped at 100 |
+| Equivalência                | `SpendingEquivalence` | `OWN_SPENDING` (whole months of the reader's own average, complete months only) or `REFERENCE_PRICE` (a quantity of a catalogue item) |
+| Item de referência          | `ReferenceItem`   | A catalogue row with an approximate unit price, its `source` and its `reviewedAt`. Seeded configuration, correctable without a deploy |
 
 Forbidden vocabulary: `data`, `info`, `manager`, `helper`, `util`, `handler` (except Express error
 handlers), `service` as a suffix for what is really a use case, `process`, `do`. Name things after

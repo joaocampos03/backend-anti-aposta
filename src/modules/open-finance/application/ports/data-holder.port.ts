@@ -85,4 +85,12 @@ export interface SharedTransaction {
   readonly status: TransactionStatus;
   readonly merchantCategoryCode: number | null;
   readonly counterpartyDocument: string | null;
+  /**
+   * The institution moved money between accounts rather than paying or being
+   * paid. `method` cannot say so — payroll and an account-to-account transfer
+   * both arrive as `TRANSFER` — and the difference decides whether a credit
+   * counts as income. Money the reader moved from their own account is not
+   * money that came in, so a share of income computed over it would be wrong.
+   */
+  readonly isAccountToAccountTransfer: boolean;
 }

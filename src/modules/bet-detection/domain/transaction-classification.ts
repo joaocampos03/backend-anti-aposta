@@ -3,12 +3,32 @@ import { fail, ok, type Result } from '@shared/domain/result.js';
 import type { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
 import type { BetClassification } from './bet-classification.js';
 import { BetDetectionError } from './bet-detection.errors.js';
+import { BookmakerIdentity } from './bookmaker-identity.js';
+import type { BookmakerRegistry } from './bookmaker-registry.js';
 import type { DetectionPolicyChain } from './detection-policy-chain.js';
 import type { DetectionSignals } from './detection-signals.js';
 import { BetClassificationOverridden } from './events/bet-classification-overridden.js';
 import { BetTransactionDetected } from './events/bet-transaction-detected.js';
 
 const REASON_MAXIMUM_LENGTH = 280;
+
+/** A transaction nobody called a bet belongs to no bookmaker. */
+function attributionFor(
+  verdict: BetClassification | null,
+  counterparty: string,
+  signals: DetectionSignals,
+  detection: DetectionContext,
+): BookmakerIdentity | null {
+  if (verdict === null) {
+    return null;
+  }
+
+  return BookmakerIdentity.resolve({
+    counterparty,
+    counterpartyDocument: signals.counterpartyDocument,
+    registry: detection.registry,
+  });
+}
 
 /** What the person said, kept for the paper's precision measurement and shown to nobody. */
 export interface ClassificationOverride {
@@ -20,9 +40,22 @@ export interface ClassificationOverride {
 interface TransactionClassificationProperties {
   readonly userId: UniqueEntityId;
   readonly signals: DetectionSignals;
+  /**
+   * The normalised merchant name, which is what groups a house on the betting
+   * screen. It is not a policy input — that is why it sits beside the signals
+   * rather than inside them.
+   */
+  readonly counterparty: string;
   readonly policyVerdict: BetClassification | null;
+  readonly bookmaker: BookmakerIdentity | null;
   readonly override: ClassificationOverride | null;
   readonly classifiedAt: Date;
+}
+
+/** What the chain and the registry are asked for together, every time. */
+export interface DetectionContext {
+  readonly chain: DetectionPolicyChain;
+  readonly registry: BookmakerRegistry;
 }
 
 /**
@@ -52,14 +85,17 @@ export class TransactionClassification extends AggregateRoot {
     readonly transactionId: UniqueEntityId;
     readonly userId: UniqueEntityId;
     readonly signals: DetectionSignals;
-    readonly chain: DetectionPolicyChain;
+    readonly counterparty: string;
+    readonly detection: DetectionContext;
     readonly classifiedAt: Date;
   }): TransactionClassification {
-    const verdict = input.chain.classify(input.signals);
+    const verdict = input.detection.chain.classify(input.signals);
     const classification = new TransactionClassification(input.transactionId, {
       userId: input.userId,
       signals: input.signals,
+      counterparty: input.counterparty,
       policyVerdict: verdict,
+      bookmaker: attributionFor(verdict, input.counterparty, input.signals, input.detection),
       override: null,
       classifiedAt: input.classifiedAt,
     });
@@ -84,8 +120,16 @@ export class TransactionClassification extends AggregateRoot {
     return this.properties.signals;
   }
 
+  get counterparty(): string {
+    return this.properties.counterparty;
+  }
+
   get policyVerdict(): BetClassification | null {
     return this.properties.policyVerdict;
+  }
+
+  get bookmaker(): BookmakerIdentity | null {
+    return this.properties.bookmaker;
   }
 
   get override(): ClassificationOverride | null {
@@ -106,6 +150,11 @@ export class TransactionClassification extends AggregateRoot {
     }
 
     return this.properties.policyVerdict;
+  }
+
+  /** The house the betting screen groups this row under, once it is a bet. */
+  get effectiveBookmaker(): BookmakerIdentity | null {
+    return this.effectiveClassification === null ? null : this.properties.bookmaker;
   }
 
   get isBet(): boolean {
@@ -156,19 +205,20 @@ export class TransactionClassification extends AggregateRoot {
    * current verdict is the one that applies.
    */
   revertOverride(input: {
-    readonly chain: DetectionPolicyChain;
+    readonly detection: DetectionContext;
     readonly revertedAt: Date;
   }): Result<void, BetDetectionError<'OVERRIDE_NOT_FOUND'>> {
     if (this.properties.override === null) {
       return fail(BetDetectionError.overrideNotFound());
     }
 
-    const verdict = input.chain.classify(this.properties.signals);
+    const verdict = input.detection.chain.classify(this.properties.signals);
 
     this.properties = {
       ...this.properties,
       override: null,
       policyVerdict: verdict,
+      bookmaker: this.attributionFrom(verdict, input.detection),
       classifiedAt: input.revertedAt,
     };
 
@@ -188,15 +238,31 @@ export class TransactionClassification extends AggregateRoot {
    * Re-runs the chain, as a re-ingestion of the same transaction would. A
    * correction survives it: the override outranks the policy permanently.
    */
-  reclassify(chain: DetectionPolicyChain, at: Date): void {
-    const verdict = chain.classify(this.properties.signals);
+  reclassify(detection: DetectionContext, at: Date): void {
+    const verdict = detection.chain.classify(this.properties.signals);
     const wasBet = this.properties.policyVerdict !== null;
 
-    this.properties = { ...this.properties, policyVerdict: verdict, classifiedAt: at };
+    this.properties = {
+      ...this.properties,
+      policyVerdict: verdict,
+      bookmaker: this.attributionFrom(verdict, detection),
+      classifiedAt: at,
+    };
 
     if (!wasBet) {
       this.announceIfBet(verdict, at);
     }
+  }
+
+  /**
+   * The attribution is re-resolved whenever the chain runs, so a house the
+   * registry gained since is a registered house from that moment on.
+   */
+  private attributionFrom(
+    verdict: BetClassification | null,
+    detection: DetectionContext,
+  ): BookmakerIdentity | null {
+    return attributionFor(verdict, this.properties.counterparty, this.properties.signals, detection);
   }
 
   private announceIfBet(verdict: BetClassification | null, at: Date): void {

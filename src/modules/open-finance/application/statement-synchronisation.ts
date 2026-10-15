@@ -175,6 +175,7 @@ export class StatementSynchronisation {
       merchantCategoryCode: row.merchantCategoryCode,
       counterpartyDocument: row.counterpartyDocument,
       statementLine: row.statementLine,
+      counterparty: transaction.value.counterparty.value,
     });
 
     return ok(transaction.value.id);
@@ -205,6 +206,7 @@ export class StatementSynchronisation {
         merchantCategoryCode: row.merchantCategoryCode,
         isCredit: amount.value.isCredit(),
         method: row.method,
+        isAccountToAccountTransfer: row.isAccountToAccountTransfer,
       }),
       method: row.method,
       status: row.status,

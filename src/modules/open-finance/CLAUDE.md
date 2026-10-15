@@ -58,15 +58,42 @@ month. In the charts the `BETS` bucket follows the **classification**, not the c
 transaction was filed under: a corrected row leaves the series, or a correction would change the
 statement and not the chart.
 
+## The periods, and one house at a time
+
+`period` is `LAST_30_DAYS | LAST_90_DAYS | LAST_180_DAYS | LAST_360_DAYS | ALL_TIME`, all on the
+same `daysAgo < N` São Paulo rule. The two long windows exist so "Ver no extrato" on the betting
+screen opens the **same** slice the figure above it described; a link that widened the period would
+show a different total for the same sentence the reader just read.
+
+`bookmakerId` filters to one house, debits and refunds alike, and the totals reflect the filter — so
+`totals.betSpend` equals that house's `total` in the summary. The id is **opaque here**: what counts
+as one bookmaker is `bet-detection`'s rule, and this context only matches the projected string. An
+id absent from this reader's own history answers `404 BOOKMAKER_NOT_FOUND`, exactly as a malformed
+one does, because confirming that somebody else's house exists is the same leak as confirming their
+account.
+
 ## The projection
 
-The three `bet_*` columns on `open_finance_transactions` are a **copy** of `bet-detection`'s
-verdict, refreshed by `ProjectClassification` on that context's events. They exist so the statement
-can filter and total in one query instead of joining across a boundary — and the subscriber
-re-reads the owning context rather than trusting a payload.
+The four `bet_*` columns on `open_finance_transactions` are a **copy** of `bet-detection`'s verdict
+and grouping, refreshed by `ProjectClassification` on that context's events. They exist so the
+statement can filter and total in one query instead of joining across a boundary — and the
+subscriber re-reads the owning context rather than trusting a payload.
 
 If `bet-detection` adds a policy, the `BetMarkReason` union here fails to compile. That is the
 point at which somebody decides what the statement should show for it.
+
+## What this context publishes for other screens
+
+`SyncStatusLookup`, `PrismaBettingWindowQuery` and `PrismaCategorySpendQuery` answer the betting
+screen's questions about movements, income and category spending. They are read models over this
+context's own tables, reached through `index.ts`, and they are the reason `bet-detection` can own
+that screen without ever joining to these tables.
+
+The income figure is **`INCOME` credits only**. A bookmaker's refund is excluded by the verdict on
+the row and money moved between accounts by its category: neither is money that came in, and a
+share of income computed against either would be a made-up number with a percent sign. That is
+also why `inferCategory` files an account-to-account transfer as `TRANSFER` in **either** direction
+— `method` cannot tell payroll from a transfer, since the protocol sends both as `TRANSFER`.
 
 ## Connecting an institution
 

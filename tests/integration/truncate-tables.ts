@@ -8,6 +8,7 @@ const TABLES = [
   'identity_users',
   'bet_detection_classifications',
   'bet_detection_bookmakers',
+  'awareness_reference_items',
   'open_finance_transactions',
   'open_finance_connected_accounts',
   'gamification_badges',

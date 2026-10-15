@@ -34,7 +34,8 @@ export class ClassifyTransaction implements UseCase<ClassifyTransactionInput, vo
   async execute(input: ClassifyTransactionInput): Promise<Result<void, AppError>> {
     const transactionId = UniqueEntityId.restore(input.transactionId);
     const userId = UniqueEntityId.restore(input.userId);
-    const chain = DetectionPolicyChain.standard(await this.dependencies.bookmakers.current());
+    const registry = await this.dependencies.bookmakers.current();
+    const detection = { chain: DetectionPolicyChain.standard(registry), registry };
     const now = this.dependencies.clock.now();
 
     const existing = await this.dependencies.classifications.findByTransactionIdAndUserId(
@@ -48,12 +49,13 @@ export class ClassifyTransaction implements UseCase<ClassifyTransactionInput, vo
         transactionId,
         userId,
         signals: this.signalsFrom(input),
-        chain,
+        counterparty: input.counterparty ?? '',
+        detection,
         classifiedAt: now,
       });
 
     if (existing !== null) {
-      existing.reclassify(chain, now);
+      existing.reclassify(detection, now);
     }
 
     await this.dependencies.classifications.save(classification);

@@ -103,6 +103,16 @@ export class PrismaTransactionLedgerQuery implements TransactionLedgerQuery {
     };
   }
 
+  /** One indexed existence check: the dialog's 404 must not scan a history. */
+  async containsBookmaker(userId: string, bookmakerId: string): Promise<boolean> {
+    const found = await this.client.transaction.count({
+      where: { userId, betBookmakerId: bookmakerId },
+      take: 1,
+    });
+
+    return found > 0;
+  }
+
   private conditions(filter: LedgerFilter): Prisma.Sql {
     const clauses: Prisma.Sql[] = [Prisma.sql`t."user_id" = ${filter.userId}::uuid`];
 
@@ -112,6 +122,10 @@ export class PrismaTransactionLedgerQuery implements TransactionLedgerQuery {
 
     if (filter.accountId !== null) {
       clauses.push(Prisma.sql`t."account_id" = ${filter.accountId}::uuid`);
+    }
+
+    if (filter.bookmakerId !== null) {
+      clauses.push(Prisma.sql`t."bet_bookmaker_id" = ${filter.bookmakerId}`);
     }
 
     const ofType = this.typeCondition(filter);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
-import { BookmakerRegistry } from './bookmaker-registry.js';
+import { BookmakerRegistry, type BookmakerRegistryEntry } from './bookmaker-registry.js';
 import { Cnpj } from './cnpj.js';
 import { DetectionPolicyChain } from './detection-policy-chain.js';
 import { DetectionSignals } from './detection-signals.js';
@@ -25,17 +25,32 @@ function aCnpj(digits: string): Cnpj {
   return document.value;
 }
 
-const EMPTY_CHAIN = DetectionPolicyChain.standard(BookmakerRegistry.empty());
-const CHAIN_WITH_BOOKMAKER = DetectionPolicyChain.standard(
-  BookmakerRegistry.of([aCnpj(BOOKMAKER_DOCUMENT)]),
-);
+const REGISTERED_BOOKMAKER: BookmakerRegistryEntry = {
+  id: UniqueEntityId.restore('0192f3c1-7a1b-7c3e-9f20-000000000009'),
+  tradeName: 'Aposta Andorinha',
+  document: aCnpj(BOOKMAKER_DOCUMENT),
+};
+
+const EMPTY_REGISTRY = BookmakerRegistry.empty();
+const REGISTRY_WITH_BOOKMAKER = BookmakerRegistry.of([REGISTERED_BOOKMAKER]);
+
+const EMPTY_DETECTION = {
+  chain: DetectionPolicyChain.standard(EMPTY_REGISTRY),
+  registry: EMPTY_REGISTRY,
+};
+
+const DETECTION_WITH_BOOKMAKER = {
+  chain: DetectionPolicyChain.standard(REGISTRY_WITH_BOOKMAKER),
+  registry: REGISTRY_WITH_BOOKMAKER,
+};
 
 function aBet(): TransactionClassification {
   return TransactionClassification.classify({
     transactionId: TRANSACTION_ID,
     userId: USER_ID,
     signals: DetectionSignals.of({ mcc: GAMBLING_MCC, description: 'BET365' }),
-    chain: EMPTY_CHAIN,
+    counterparty: 'Bet365',
+    detection: EMPTY_DETECTION,
     classifiedAt: CLASSIFIED_AT,
   });
 }
@@ -45,7 +60,8 @@ function aGroceryRun(): TransactionClassification {
     transactionId: TRANSACTION_ID,
     userId: USER_ID,
     signals: DetectionSignals.of({ mcc: 5411, description: 'SUPERMERCADO' }),
-    chain: EMPTY_CHAIN,
+    counterparty: 'Supermercado Pão de Açúcar',
+    detection: EMPTY_DETECTION,
     classifiedAt: CLASSIFIED_AT,
   });
 }
@@ -132,7 +148,7 @@ describe('TransactionClassification', () => {
       const classification = aBet();
       classification.overrideAsNotABet({ reason: null, overriddenAt: LATER });
 
-      classification.reclassify(EMPTY_CHAIN, LATER);
+      classification.reclassify(EMPTY_DETECTION, LATER);
 
       expect(classification.isBet).toBe(false);
       expect(classification.policyVerdict?.matchedBy).toBe('GAMBLING_MCC');
@@ -145,7 +161,7 @@ describe('TransactionClassification', () => {
       classification.overrideAsNotABet({ reason: null, overriddenAt: LATER });
       classification.pullEvents();
 
-      const reverted = classification.revertOverride({ chain: EMPTY_CHAIN, revertedAt: LATER });
+      const reverted = classification.revertOverride({ detection: EMPTY_DETECTION, revertedAt: LATER });
 
       expect(reverted.ok).toBe(true);
       expect(classification.isBet).toBe(true);
@@ -160,23 +176,84 @@ describe('TransactionClassification', () => {
           counterpartyDocument: aCnpj(BOOKMAKER_DOCUMENT),
           description: 'PIX ENVIADO',
         }),
-        chain: EMPTY_CHAIN,
+        counterparty: 'PIX ENVIADO',
+        detection: EMPTY_DETECTION,
         classifiedAt: CLASSIFIED_AT,
       });
 
       // The chain said nothing, so there is nothing to correct yet; the registry
       // gains the operator and a re-run finds it.
       expect(byDocumentOnly.isBet).toBe(false);
-      byDocumentOnly.reclassify(CHAIN_WITH_BOOKMAKER, LATER);
+      byDocumentOnly.reclassify(DETECTION_WITH_BOOKMAKER, LATER);
 
       expect(byDocumentOnly.isBet).toBe(true);
       expect(byDocumentOnly.policyVerdict?.matchedBy).toBe('LICENSED_CNPJ');
     });
 
     it('refuses when there is no correction to undo', () => {
-      const result = aBet().revertOverride({ chain: EMPTY_CHAIN, revertedAt: LATER });
+      const result = aBet().revertOverride({ detection: EMPTY_DETECTION, revertedAt: LATER });
 
       expect(!result.ok && result.error.code).toBe('OVERRIDE_NOT_FOUND');
+    });
+  });
+
+  describe('attributing a bookmaker', () => {
+    it('attributes nothing to a transaction nobody called a bet', () => {
+      expect(aGroceryRun().bookmaker).toBeNull();
+    });
+
+    it('names an unregistered house after its counterparty', () => {
+      const bookmaker = aBet().bookmaker;
+
+      expect(bookmaker?.registryStatus).toBe('UNREGISTERED');
+      expect(bookmaker?.name).toBe('Bet365');
+    });
+
+    it('takes the registry name once the operator is registered', () => {
+      const classification = TransactionClassification.classify({
+        transactionId: TRANSACTION_ID,
+        userId: USER_ID,
+        signals: DetectionSignals.of({
+          counterpartyDocument: aCnpj(BOOKMAKER_DOCUMENT),
+          description: 'PIX ENVIADO',
+        }),
+        counterparty: 'PIX ENVIADO',
+        detection: DETECTION_WITH_BOOKMAKER,
+        classifiedAt: CLASSIFIED_AT,
+      });
+
+      expect(classification.bookmaker?.registryStatus).toBe('REGISTERED');
+      expect(classification.bookmaker?.name).toBe('Aposta Andorinha');
+    });
+
+    it('re-resolves the attribution when the registry has gained the operator', () => {
+      const classification = TransactionClassification.classify({
+        transactionId: TRANSACTION_ID,
+        userId: USER_ID,
+        signals: DetectionSignals.of({
+          mcc: GAMBLING_MCC,
+          counterpartyDocument: aCnpj(BOOKMAKER_DOCUMENT),
+          description: 'ANDORINHA*PIX',
+        }),
+        counterparty: 'ANDORINHA*PIX',
+        detection: EMPTY_DETECTION,
+        classifiedAt: CLASSIFIED_AT,
+      });
+
+      expect(classification.bookmaker?.registryStatus).toBe('UNREGISTERED');
+
+      classification.reclassify(DETECTION_WITH_BOOKMAKER, LATER);
+
+      expect(classification.bookmaker?.registryStatus).toBe('REGISTERED');
+      expect(classification.bookmaker?.name).toBe('Aposta Andorinha');
+    });
+
+    it('keeps a corrected row out of every bookmaker figure', () => {
+      const classification = aBet();
+      classification.overrideAsNotABet({ reason: null, overriddenAt: LATER });
+
+      expect(classification.bookmaker).not.toBeNull();
+      expect(classification.effectiveBookmaker).toBeNull();
     });
   });
 });

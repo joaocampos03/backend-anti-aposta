@@ -36,12 +36,20 @@ export function inferCategory(input: {
   readonly merchantCategoryCode: number | null;
   readonly isCredit: boolean;
   readonly method: PaymentMethod;
+  readonly isAccountToAccountTransfer?: boolean;
 }): TransactionCategory {
   const byMcc =
     input.merchantCategoryCode === null ? undefined : CATEGORY_BY_MCC.get(input.merchantCategoryCode);
 
   if (byMcc !== undefined) {
     return byMcc;
+  }
+
+  // Money moving between accounts is a transfer whichever way it goes. It is
+  // not earnings, and filing it as `INCOME` would inflate the denominator the
+  // betting screen states a share of income against.
+  if (input.isAccountToAccountTransfer === true) {
+    return 'TRANSFER';
   }
 
   if (input.isCredit) {

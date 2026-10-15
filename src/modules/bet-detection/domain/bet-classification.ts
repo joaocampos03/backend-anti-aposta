@@ -9,6 +9,27 @@ export type ClassificationSource = 'POLICY' | 'USER_OVERRIDE';
 const CONFIDENCE_ORDER: readonly DetectionConfidence[] = ['LOW', 'MEDIUM', 'HIGH'];
 
 /**
+ * Strongest first, and the same order the chain runs in. Every ranking that
+ * breaks a tie between two policies breaks it by this list, so two loads of the
+ * same screen cannot reshuffle.
+ */
+export const DETECTION_REASONS_BY_STRENGTH: readonly DetectionReason[] = [
+  'GAMBLING_MCC',
+  'LICENSED_CNPJ',
+  'DESCRIPTION_KEYWORD',
+];
+
+/** Lower is stronger. */
+export function strengthOf(reason: DetectionReason): number {
+  return DETECTION_REASONS_BY_STRENGTH.indexOf(reason);
+}
+
+/** Lower is less certain, which is the direction every tie-break here takes. */
+export function certaintyOf(confidence: DetectionConfidence): number {
+  return CONFIDENCE_ORDER.indexOf(confidence);
+}
+
+/**
  * Why a transaction was taken for a bet, and how sure the chain is.
  *
  * Never a bare boolean, in the domain or on the wire. Somebody who sees a

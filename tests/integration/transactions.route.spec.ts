@@ -264,6 +264,104 @@ describe('GET /api/v1/transactions', () => {
 
       expect(response.body.items).toHaveLength(2);
     });
+
+    /**
+     * The betting screen links here with the window it was showing. A link
+     * that widened the period would show a different total for the same
+     * sentence the reader just read.
+     */
+    it('applies the same day rule to the 180-day window', async () => {
+      await connectAndSeed(({ checkingId: checking }) => [
+        aBet(checking, -10000, daysAgo(179, 12, 0)),
+        aBet(checking, -20000, daysAgo(180, 12, 0)),
+      ]);
+
+      const response = await ledger('?period=LAST_180_DAYS');
+
+      expect(response.body.items).toHaveLength(1);
+      expect(response.body.totals.betSpend.amountInCents).toBe(10000);
+    });
+
+    it('applies the same day rule to the 360-day window', async () => {
+      await connectAndSeed(({ checkingId: checking }) => [
+        aBet(checking, -10000, daysAgo(359, 12, 0)),
+        aBet(checking, -20000, daysAgo(360, 12, 0)),
+      ]);
+
+      const response = await ledger('?period=LAST_360_DAYS');
+
+      expect(response.body.items).toHaveLength(1);
+      expect(response.body.totals.betSpend.amountInCents).toBe(10000);
+    });
+  });
+
+  describe('one bookmaker at a time', () => {
+    async function bookmakerIdOf(): Promise<string> {
+      const response = await request(createTestApp())
+        .get('/api/v1/bets/summary?days=360')
+        .set('Authorization', `Bearer ${token}`);
+
+      const houses: readonly { readonly bookmakerId: string }[] = response.body.bookmakers;
+
+      return houses[0]?.bookmakerId ?? '';
+    }
+
+    it('returns that house debits and refunds, netted in the totals', async () => {
+      await connectAndSeed(({ checkingId: checking }) => [
+        aBet(checking, -10000, daysAgo(5, 12, 0)),
+        aBet(checking, -10000, daysAgo(4, 12, 0)),
+        { ...aBet(checking, 5000, daysAgo(3, 12, 0)), description: 'ESTORNO PIX' },
+        aPurchase(checking, -18740, daysAgo(2, 12, 0)),
+      ]);
+
+      const response = await ledger(
+        `?type=BETS&period=LAST_30_DAYS&bookmakerId=${await bookmakerIdOf()}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.items).toHaveLength(3);
+      expect(response.body.totals.betSpend.amountInCents).toBe(15000);
+    });
+
+    it('answers newest first, as every other page does', async () => {
+      await connectAndSeed(({ checkingId: checking }) => [
+        aBet(checking, -10000, daysAgo(5, 12, 0)),
+        aBet(checking, -20000, daysAgo(2, 12, 0)),
+      ]);
+
+      const response = await ledger(
+        `?type=BETS&period=LAST_30_DAYS&bookmakerId=${await bookmakerIdOf()}`,
+      );
+
+      expect(response.body.items[0].amount.amountInCents).toBe(-20000);
+    });
+
+    it('answers 404 for a house that is not in this reader history', async () => {
+      await connectAndSeed(({ checkingId: checking }) => [
+        aBet(checking, -10000, daysAgo(5, 12, 0)),
+      ]);
+
+      const response = await ledger('?bookmakerId=bkm_unregistered_deadbeef');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('BOOKMAKER_NOT_FOUND');
+      expect(response.body.error.message).toBe('Não encontramos essa casa de apostas.');
+    });
+
+    it('answers 404 for another reader house, never 403', async () => {
+      await connectAndSeed(({ checkingId: checking }) => [
+        aBet(checking, -10000, daysAgo(5, 12, 0)),
+      ]);
+      const bookmakerId = await bookmakerIdOf();
+
+      const other = await registerCaller('bruno@exemplo.com');
+      const response = await request(createTestApp())
+        .get(`${LEDGER_PATH}?bookmakerId=${bookmakerId}`)
+        .set('Authorization', `Bearer ${other.token}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('BOOKMAKER_NOT_FOUND');
+    });
   });
 
   describe('refunds and pending entries', () => {

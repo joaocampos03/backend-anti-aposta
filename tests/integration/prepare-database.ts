@@ -32,8 +32,16 @@ export default async function prepareDatabase(): Promise<void> {
 
   await createDatabase(url);
 
+  // `DATABASE_URL_UNPOOLED` is the schema's `directUrl`, and that is the
+  // connection `migrate` uses when it is set. Overriding only `DATABASE_URL`
+  // would migrate the development database and leave this one a version behind
+  // — and `stdio: 'ignore'` would say nothing about it.
   execSync('npx prisma migrate deploy', {
-    env: { ...process.env, DATABASE_URL: INTEGRATION_DATABASE_URL },
-    stdio: 'ignore',
+    env: {
+      ...process.env,
+      DATABASE_URL: INTEGRATION_DATABASE_URL,
+      DATABASE_URL_UNPOOLED: INTEGRATION_DATABASE_URL,
+    },
+    stdio: 'inherit',
   });
 }

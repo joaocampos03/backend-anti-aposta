@@ -1,6 +1,7 @@
 import type { TransactionClassification as ClassificationRow } from '@prisma/client';
 import { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
 import { BetClassification } from '../domain/bet-classification.js';
+import { BookmakerIdentity } from '../domain/bookmaker-identity.js';
 import { Cnpj } from '../domain/cnpj.js';
 import { DetectionSignals } from '../domain/detection-signals.js';
 import { TransactionClassification } from '../domain/transaction-classification.js';
@@ -16,6 +17,7 @@ export class TransactionClassificationMapper {
         counterpartyDocument: document !== null && document.ok ? document.value : null,
         description: row.description,
       }),
+      counterparty: row.counterparty,
       policyVerdict:
         row.matchedBy === null || row.confidence === null
           ? null
@@ -23,6 +25,14 @@ export class TransactionClassificationMapper {
               matchedBy: row.matchedBy,
               confidence: row.confidence,
               source: 'POLICY',
+            }),
+      bookmaker:
+        row.bookmakerId === null || row.bookmakerName === null || row.registryStatus === null
+          ? null
+          : BookmakerIdentity.restore({
+              bookmakerId: row.bookmakerId,
+              name: row.bookmakerName,
+              registryStatus: row.registryStatus,
             }),
       override:
         row.overrideVerdict === null || row.overriddenAt === null
@@ -38,6 +48,7 @@ export class TransactionClassificationMapper {
 
   static toRow(classification: TransactionClassification): ClassificationRow {
     const verdict = classification.policyVerdict;
+    const bookmaker = classification.bookmaker;
     const override = classification.override;
 
     return {
@@ -46,8 +57,12 @@ export class TransactionClassificationMapper {
       mcc: classification.signals.mcc,
       counterpartyDocument: classification.signals.counterpartyDocument?.digits ?? null,
       description: classification.signals.description,
+      counterparty: classification.counterparty,
       matchedBy: verdict?.matchedBy ?? null,
       confidence: verdict?.confidence ?? null,
+      bookmakerId: bookmaker?.bookmakerId.value ?? null,
+      bookmakerName: bookmaker?.name ?? null,
+      registryStatus: bookmaker?.registryStatus ?? null,
       classifiedAt: classification.classifiedAt,
       overrideVerdict: override?.verdict ?? null,
       overrideReason: override?.reason ?? null,

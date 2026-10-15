@@ -73,6 +73,7 @@ describe('Transaction', () => {
       matchedBy: 'GAMBLING_MCC',
       confidence: 'HIGH',
       source: 'POLICY',
+      bookmakerId: 'bkm_unregistered_0d3c4f2a',
     });
 
     expect(ingested.value.spendBucket).toBe('BETS');
@@ -101,6 +102,7 @@ describe('Transaction', () => {
       matchedBy: 'DESCRIPTION_KEYWORD',
       confidence: 'LOW',
       source: 'POLICY',
+      bookmakerId: 'bkm_unregistered_0d3c4f2a',
     });
     ingested.value.projectClassification(null);
 

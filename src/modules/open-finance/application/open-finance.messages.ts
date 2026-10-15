@@ -6,6 +6,7 @@
  */
 export const OPEN_FINANCE_MESSAGES = {
   accountNotFound: 'Não encontramos essa conta.',
+  bookmakerNotFound: 'Não encontramos essa casa de apostas.',
   transactionsFilterInvalid: 'Não conseguimos aplicar esses filtros.',
   transactionsUnavailable:
     'Não conseguimos carregar suas transações agora. Tente novamente em instantes.',

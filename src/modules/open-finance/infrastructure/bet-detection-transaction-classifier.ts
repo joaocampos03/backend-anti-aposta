@@ -15,6 +15,7 @@ export class BetDetectionTransactionClassifier implements TransactionClassifier 
     readonly merchantCategoryCode: number | null;
     readonly counterpartyDocument: string | null;
     readonly statementLine: string;
+    readonly counterparty: string;
   }): Promise<void> {
     const classified = await this.classifyTransaction.execute({
       userId: input.userId,
@@ -22,6 +23,7 @@ export class BetDetectionTransactionClassifier implements TransactionClassifier 
       mcc: input.merchantCategoryCode,
       counterpartyDocument: input.counterpartyDocument,
       description: input.statementLine,
+      counterparty: input.counterparty,
     });
 
     if (!classified.ok) {

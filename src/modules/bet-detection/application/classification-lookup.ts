@@ -11,6 +11,8 @@ export interface ProjectedClassification {
     readonly matchedBy: DetectionReason;
     readonly confidence: DetectionConfidence;
     readonly source: ClassificationSource;
+    /** Opaque, and never the registration number behind it. */
+    readonly bookmakerId: string | null;
   } | null;
   readonly overriddenAt: Date | null;
 }
@@ -45,6 +47,7 @@ export class ClassificationLookup {
               matchedBy: effective.matchedBy,
               confidence: effective.confidence,
               source: effective.source,
+              bookmakerId: classification.effectiveBookmaker?.bookmakerId.value ?? null,
             },
       overriddenAt: classification.override?.overriddenAt ?? null,
     };

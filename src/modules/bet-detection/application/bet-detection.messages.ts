@@ -15,4 +15,6 @@ export const BET_DETECTION_MESSAGES = {
   tooManyAttempts: 'Muitas correções em pouco tempo. Tente novamente em alguns minutos.',
   overrideUnavailable: 'Não conseguimos registrar a correção agora. Tente novamente em instantes.',
   revertUnavailable: 'Não conseguimos desfazer a correção agora. Tente novamente em instantes.',
+  betsPeriodInvalid: 'Não conseguimos aplicar esse período.',
+  betsUnavailable: 'Não conseguimos carregar suas apostas agora. Tente novamente em instantes.',
 } as const;

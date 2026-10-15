@@ -25,10 +25,13 @@ import { identityFailures } from '@modules/identity/application/identity.failure
 import { IDENTITY_MESSAGES } from '@modules/identity/application/identity.messages.js';
 import {
   AmountReframing,
+  DescribeEquivalences,
   EvaluateSupportOffer,
   FIXED_INCOME_ANNUAL_RATE_PERCENT,
 } from '@modules/awareness/index.js';
+import { OpenFinanceCategoryAverageReader } from '@modules/awareness/infrastructure/open-finance-category-average-reader.js';
 import { OpenFinanceMonthlyBetSpendReader } from '@modules/awareness/infrastructure/open-finance-monthly-bet-spend-reader.js';
+import { PrismaReferenceItemRepository } from '@modules/awareness/infrastructure/prisma-reference-item.repository.js';
 import { AwarenessController } from '@modules/awareness/http/awareness.controller.js';
 import {
   ClassificationLookup,
@@ -36,15 +39,20 @@ import {
   ForgetUserClassifications,
   ReclassifyTransaction,
   RevertReclassification,
+  SummariseBetting,
   BetClassificationOverridden,
   BetTransactionDetected,
 } from '@modules/bet-detection/index.js';
+import { AwarenessEquivalenceReader } from '@modules/bet-detection/infrastructure/awareness-equivalence-reader.js';
 import { AwarenessYieldCalculator as DetectionYieldCalculator } from '@modules/bet-detection/infrastructure/awareness-yield-calculator.js';
+import { OpenFinanceBettingLedger } from '@modules/bet-detection/infrastructure/open-finance-betting-ledger.js';
 import { OpenFinanceTransactionReader } from '@modules/bet-detection/infrastructure/open-finance-transaction-reader.js';
+import { PrismaBookmakerIdentityQuery } from '@modules/bet-detection/infrastructure/bookmaker-identity.query.js';
 import { PrismaBookmakerRepository } from '@modules/bet-detection/infrastructure/prisma-bookmaker.repository.js';
 import { PrismaTransactionClassificationRepository } from '@modules/bet-detection/infrastructure/prisma-transaction-classification.repository.js';
 import { BetDetectionController } from '@modules/bet-detection/http/bet-detection.controller.js';
 import {
+  betSummaryQuerySchema,
   classificationOverrideBodySchema,
   transactionIdParamsSchema,
 } from '@modules/bet-detection/http/bet-detection.schemas.js';
@@ -55,9 +63,12 @@ import {
   ListConnectedAccounts,
   ListTransactions,
   ProjectClassification,
+  PrismaBettingWindowQuery,
+  PrismaCategorySpendQuery,
   PrismaMonthlyBetSpendQuery,
   PurgeUserFinancialData,
   SummariseSpendByMonth,
+  SyncStatusLookup,
   TransactionAmountLookup,
   TransactionsIngested,
 } from '@modules/open-finance/index.js';
@@ -367,6 +378,31 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     clock,
   );
 
+  // The betting screen. `bet-detection` owns it and composes the other two
+  // through their public APIs: the movements and the income are
+  // `open-finance`'s, the rate and the equivalence catalogue are `awareness`'s,
+  // and the grouping, the counts and the tallies are its own.
+  const describeEquivalences = new DescribeEquivalences({
+    items: new PrismaReferenceItemRepository(input.prisma),
+    averages: new OpenFinanceCategoryAverageReader(
+      new PrismaCategorySpendQuery(input.prisma, calendar, input.settings.timeZone),
+    ),
+    calendar,
+    clock,
+  });
+
+  const summariseBetting = new SummariseBetting({
+    ledger: new OpenFinanceBettingLedger(
+      new PrismaBettingWindowQuery(input.prisma),
+      new SyncStatusLookup(consents, clock),
+    ),
+    identities: new PrismaBookmakerIdentityQuery(input.prisma),
+    equivalences: new AwarenessEquivalenceReader(describeEquivalences),
+    yields: new DetectionYieldCalculator(reframing),
+    calendar,
+    clock,
+  });
+
   subscribeToClassificationChanges({
     eventBus,
     projectClassification: new ProjectClassification(
@@ -469,6 +505,7 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       transactionIdParamsSchema,
       betDetectionFailures.validationFailed,
     ),
+    betSummary: validateQuery(betSummaryQuerySchema, betDetectionFailures.betsPeriodInvalid),
   };
 
   const overrideBody = validateBody(
@@ -574,12 +611,15 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       controller: new BetDetectionController(
         reclassifyTransaction,
         revertReclassification,
+        summariseBetting,
         overrideBody,
         queries.transactionIdParams,
+        queries.betSummary,
       ),
       requireSession: sessionGuard,
       validateTransactionIdParams: queries.transactionIdParams.middleware,
       validateOverrideBody: overrideBody.middleware,
+      validateBetSummaryQuery: queries.betSummary.middleware,
       overrideRateLimits: [
         windowedRateLimit({
           code: 'TOO_MANY_ATTEMPTS',

@@ -23,6 +23,11 @@ export interface LedgerFilter {
   /** `null` for the whole retained history. */
   readonly occurredFrom: Date | null;
   readonly accountId: string | null;
+  /**
+   * One house's classified rows, read from the projected grouping. Opaque here:
+   * what counts as one bookmaker is `bet-detection`'s rule.
+   */
+  readonly bookmakerId: string | null;
   readonly search: string | null;
 }
 
@@ -72,4 +77,10 @@ export interface LedgerTotalsRow {
 export interface TransactionLedgerQuery {
   page(filter: LedgerFilter, limit: number, cursor: LedgerCursor | null): Promise<LedgerPage>;
   totals(filter: LedgerFilter): Promise<LedgerTotalsRow>;
+  /**
+   * Whether this reader has ever had a row grouped under that house. An id
+   * absent from their own history is answered as missing, never as forbidden:
+   * a 403 would confirm that somebody else's bookmaker exists.
+   */
+  containsBookmaker(userId: string, bookmakerId: string): Promise<boolean>;
 }

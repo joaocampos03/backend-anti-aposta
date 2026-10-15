@@ -78,6 +78,36 @@ export async function registerBookmaker(): Promise<void> {
   });
 }
 
+/**
+ * The equivalence catalogue, as the seed writes it. Two items, priced so a test
+ * can do the division in its head.
+ */
+export async function registerReferenceItems(): Promise<void> {
+  await prisma.referenceItem.createMany({
+    data: [
+      {
+        id: 'notebook',
+        singular: 'notebook',
+        plural: 'notebooks',
+        unitPriceInCents: 250_000,
+        source: 'Estimativa arredondada para a demonstração',
+        reviewedAt: '2026-10-01',
+        isActive: true,
+      },
+      {
+        id: 'passagem',
+        singular: 'passagem aérea',
+        plural: 'passagens aéreas',
+        unitPriceInCents: 90_000,
+        source: 'Estimativa arredondada para a demonstração',
+        reviewedAt: '2026-10-01',
+        isActive: true,
+      },
+    ],
+    skipDuplicates: true,
+  });
+}
+
 export async function authoriseConsent(
   userId: string,
   options: { readonly synced?: boolean } = {},
@@ -195,6 +225,7 @@ export async function ingestAndClassify(
       mcc: row.mcc ?? null,
       counterpartyDocument: row.counterpartyDocument ?? null,
       description: row.description ?? '',
+      counterparty: row.counterparty,
     });
   }
 
@@ -239,6 +270,84 @@ export function aBet(accountId: string, amountInCents: number, when: Date): Seed
     status: 'SETTLED',
     mcc: 7995,
     description: 'PIX ENVIADO',
+  };
+}
+
+/**
+ * A bookmaker hiding behind a generic line: only the registration number gives
+ * it away, so the grouping has to come from the registry and the name with it.
+ */
+export function aBetByDocument(
+  accountId: string,
+  amountInCents: number,
+  when: Date,
+  counterparty = 'PIX ENVIADO',
+): SeededTransaction {
+  return {
+    accountId,
+    occurredAt: when,
+    amountInCents,
+    counterparty,
+    category: 'TRANSFER',
+    method: 'PIX',
+    status: 'SETTLED',
+    counterpartyDocument: BOOKMAKER_DOCUMENT,
+    description: 'PIX ENVIADO',
+  };
+}
+
+/** Caught by the line alone: no registry entry, so the name is the counterparty. */
+export function aBetByKeyword(
+  accountId: string,
+  amountInCents: number,
+  when: Date,
+  counterparty = 'Esportes da Sorte',
+): SeededTransaction {
+  return {
+    accountId,
+    occurredAt: when,
+    amountInCents,
+    counterparty,
+    category: 'OTHER',
+    method: 'PIX',
+    status: 'SETTLED',
+    description: 'PIX Aposta esportiva',
+  };
+}
+
+/** Money a house gave back. Classified like any movement with that house. */
+export function aRefund(
+  accountId: string,
+  amountInCents: number,
+  when: Date,
+): SeededTransaction {
+  return {
+    accountId,
+    occurredAt: when,
+    amountInCents,
+    counterparty: 'Aposta Andorinha',
+    category: 'INCOME',
+    method: 'PIX',
+    status: 'SETTLED',
+    counterpartyDocument: BOOKMAKER_DOCUMENT,
+    description: 'ESTORNO PIX',
+  };
+}
+
+export function anIncome(
+  accountId: string,
+  amountInCents: number,
+  when: Date,
+): SeededTransaction {
+  return {
+    accountId,
+    occurredAt: when,
+    amountInCents,
+    counterparty: 'Salário',
+    category: 'INCOME',
+    method: 'TRANSFER',
+    status: 'SETTLED',
+    description: 'SALARIO',
   };
 }
 

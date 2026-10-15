@@ -1,7 +1,6 @@
 import type { AppError } from '@shared/application/app-error.js';
 import type { Clock } from '@shared/application/clock.port.js';
 import type { UseCase } from '@shared/application/use-case.js';
-import { assertNever } from '@shared/domain/assert-never.js';
 import type { Calendar } from '@shared/domain/calendar.js';
 import { Money } from '@shared/domain/money.js';
 import { fail, ok, type Result } from '@shared/domain/result.js';
@@ -28,6 +27,8 @@ import type { YieldCalculator } from './ports/yield-calculator.port.js';
 const PERIOD_IN_DAYS: Readonly<Record<Exclude<LedgerPeriod, 'ALL_TIME'>, number>> = {
   LAST_30_DAYS: 29,
   LAST_90_DAYS: 89,
+  LAST_180_DAYS: 179,
+  LAST_360_DAYS: 359,
 };
 
 const EMPTY_TOTALS: LedgerTotalsRow = {
@@ -73,6 +74,12 @@ export class ListTransactions implements UseCase<ListTransactionsInput, ListTran
       return ownedAccount;
     }
 
+    const knownBookmaker = await this.verifyBookmaker(input);
+
+    if (!knownBookmaker.ok) {
+      return knownBookmaker;
+    }
+
     if (syncStatus === 'NO_CONSENT') {
       return ok(this.nothingToShow(syncStatus, null));
     }
@@ -98,6 +105,24 @@ export class ListTransactions implements UseCase<ListTransactionsInput, ListTran
           );
 
     return account === null ? fail(openFinanceFailures.accountNotFound()) : ok(undefined);
+  }
+
+  /**
+   * A bookmaker id absent from this reader's own history answers 404, exactly
+   * as a malformed one does. Confirming that somebody else's house exists would
+   * be the same leak as confirming their account.
+   */
+  private async verifyBookmaker(input: ListTransactionsInput): Promise<Result<void, AppError>> {
+    if (input.bookmakerId === null) {
+      return ok(undefined);
+    }
+
+    const known = await this.dependencies.ledger.containsBookmaker(
+      input.userId,
+      input.bookmakerId,
+    );
+
+    return known ? ok(undefined) : fail(openFinanceFailures.bookmakerNotFound());
   }
 
   private async describe(
@@ -146,21 +171,17 @@ export class ListTransactions implements UseCase<ListTransactionsInput, ListTran
       type: input.type,
       occurredFrom: this.periodStart(input.period, now),
       accountId: input.accountId,
+      bookmakerId: input.bookmakerId,
       search: input.search,
     };
   }
 
   private periodStart(period: LedgerPeriod, now: Date): Date | null {
-    switch (period) {
-      case 'LAST_30_DAYS':
-        return this.dependencies.calendar.startOfDaysBefore(now, PERIOD_IN_DAYS.LAST_30_DAYS);
-      case 'LAST_90_DAYS':
-        return this.dependencies.calendar.startOfDaysBefore(now, PERIOD_IN_DAYS.LAST_90_DAYS);
-      case 'ALL_TIME':
-        return null;
-      default:
-        return assertNever(period);
+    if (period === 'ALL_TIME') {
+      return null;
     }
+
+    return this.dependencies.calendar.startOfDaysBefore(now, PERIOD_IN_DAYS[period]);
   }
 
   private cursorFrom(input: ListTransactionsInput) {

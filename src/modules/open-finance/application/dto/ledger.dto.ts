@@ -11,13 +11,25 @@ import type {
 } from '../../domain/transaction-attributes.js';
 import type { LedgerType } from '../ports/transaction-ledger.query.port.js';
 
-export type LedgerPeriod = 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'ALL_TIME';
+/**
+ * The 180- and 360-day windows exist so "Ver no extrato" on the betting screen
+ * opens the **same** slice the figure above it described. A link that widened
+ * the period would show a different total for the same sentence.
+ */
+export type LedgerPeriod =
+  | 'LAST_30_DAYS'
+  | 'LAST_90_DAYS'
+  | 'LAST_180_DAYS'
+  | 'LAST_360_DAYS'
+  | 'ALL_TIME';
 
 export interface ListTransactionsInput {
   readonly userId: string;
   readonly type: LedgerType;
   readonly period: LedgerPeriod;
   readonly accountId: string | null;
+  /** One house's rows, debits and refunds alike. From `GET /bets/summary`. */
+  readonly bookmakerId: string | null;
   readonly search: string | null;
   readonly limit: number;
   readonly cursor: { readonly occurredAt: string; readonly id: string } | null;

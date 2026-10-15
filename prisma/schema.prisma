@@ -235,12 +235,17 @@ model Transaction {
   betMatchedBy  DetectionReason?    @map("bet_matched_by")
   betConfidence DetectionConfidence? @map("bet_confidence")
   betSource     ClassificationSource? @map("bet_source")
+  /// Which house the row belongs to, projected alongside the verdict so the
+  /// bookmaker dialog filters the statement in one query. An opaque string, not
+  /// a foreign key: the authoritative grouping lives in `bet-detection`.
+  betBookmakerId String?            @map("bet_bookmaker_id") @db.VarChar(64)
   overriddenAt  DateTime?           @map("overridden_at") @db.Timestamptz(3)
   account       ConnectedAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, externalId])
   @@index([userId, occurredAt(sort: Desc), id(sort: Desc)])
   @@index([userId, accountId])
+  @@index([userId, betBookmakerId, occurredAt(sort: Desc)], map: "open_finance_transactions_bookmaker_idx")
   @@map("open_finance_transactions")
 }
 
@@ -277,6 +282,16 @@ enum OverrideVerdict {
   @@map("bet_detection_override_verdict")
 }
 
+/// Whether a bookmaker grouping came from the registry or from a counterparty
+/// name. No screen shows it: it is here so the paper can report how often an
+/// unregistered grouping had to guess.
+enum RegistryStatus {
+  REGISTERED
+  UNREGISTERED
+
+  @@map("bet_detection_registry_status")
+}
+
 /// A betting operator, by registration number. Data rather than code, so a
 /// correction undone tomorrow is judged by tomorrow's registry.
 model Bookmaker {
@@ -299,15 +314,49 @@ model TransactionClassification {
   mcc                  Int?
   counterpartyDocument String?               @map("counterparty_document") @db.VarChar(14)
   description          String                @default("")
+  /// The normalised merchant name, not the statement line: it is what groups a
+  /// house the registry has no entry for.
+  counterparty         String                @default("") @db.VarChar(140)
   matchedBy            DetectionReason?      @map("matched_by")
   confidence           DetectionConfidence?
+  /// The attribution, re-resolved every time the chain runs. `null` whenever the
+  /// row is not a bet.
+  bookmakerId          String?               @map("bookmaker_id") @db.VarChar(64)
+  bookmakerName        String?               @map("bookmaker_name") @db.VarChar(140)
+  registryStatus       RegistryStatus?       @map("registry_status")
   classifiedAt         DateTime              @map("classified_at") @db.Timestamptz(3)
   overrideVerdict      OverrideVerdict?      @map("override_verdict")
   overrideReason       String?               @map("override_reason") @db.VarChar(280)
   overriddenAt         DateTime?             @map("overridden_at") @db.Timestamptz(3)
 
   @@index([userId])
+  @@index([userId, bookmakerId], map: "bet_detection_classifications_bookmaker_idx")
   @@map("bet_detection_classifications")
+}
+
+// ---------------------------------------------------------------------------
+// awareness — System 2 reframing and nudges
+// ---------------------------------------------------------------------------
+
+/// What a betting total is divided into, so an amount becomes something a
+/// person recognises. Configuration rather than code, as the bookmaker registry
+/// is: a price can be corrected without a deploy.
+///
+/// Every row carries where its price came from and when it was last looked at.
+/// A stale figure makes the whole card look careless, and the screen labels
+/// these as approximations because that is what they are.
+model ReferenceItem {
+  id            String   @id @db.VarChar(40)
+  singular      String   @db.VarChar(60)
+  plural        String   @db.VarChar(60)
+  unitPriceInCents Int   @map("unit_price_in_cents")
+  source        String   @db.VarChar(120)
+  /// The São Paulo day the price was last reviewed, as a calendar key.
+  reviewedAt    String   @map("reviewed_at") @db.VarChar(10)
+  /// So an item can be retired without deleting the row that priced it.
+  isActive      Boolean  @default(true) @map("is_active")
+
+  @@map("awareness_reference_items")
 }
 
 // ---------------------------------------------------------------------------

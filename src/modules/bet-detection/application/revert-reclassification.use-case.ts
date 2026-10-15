@@ -53,8 +53,9 @@ export class RevertReclassification
       return fail(betDetectionFailures.transactionNotFound());
     }
 
+    const registry = await this.dependencies.bookmakers.current();
     const reverted = classification.revertOverride({
-      chain: DetectionPolicyChain.standard(await this.dependencies.bookmakers.current()),
+      detection: { chain: DetectionPolicyChain.standard(registry), registry },
       revertedAt: this.dependencies.clock.now(),
     });
 
