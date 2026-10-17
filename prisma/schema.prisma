@@ -399,6 +399,89 @@ model Badge {
   @@map("gamification_badges")
 }
 
+// Savings goals: self-reported. The balance is never stored — it is summed from
+// the movements, which are append-only.
+
+enum SavingsGoalPurpose {
+  EMERGENCY_FUND
+  DEBT_PAYOFF
+  HOME
+  EDUCATION
+  TRAVEL
+  VEHICLE
+  HEALTH
+  OTHER
+
+  @@map("gamification_goal_purpose")
+}
+
+enum GoalMovementDirection {
+  DEPOSIT
+  WITHDRAWAL
+
+  @@map("gamification_movement_direction")
+}
+
+/// `reached_at` is null until the balance first reaches the target, and is never cleared after.
+model SavingsGoal {
+  id            String             @id @db.Uuid
+  userId        String             @map("user_id") @db.Uuid
+  title         String             @db.VarChar(60)
+  purpose       SavingsGoalPurpose
+  targetInCents Int                @map("target_in_cents")
+  createdAt     DateTime           @map("created_at") @db.Timestamptz(3)
+  reachedAt     DateTime?          @map("reached_at") @db.Timestamptz(3)
+  version       Int                @default(0)
+  movements     GoalMovement[]
+
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("gamification_savings_goals")
+}
+
+/// `idempotency_key` is null when the client sent none with the request.
+model GoalMovement {
+  id             String                @id @db.Uuid
+  goalId         String                @map("goal_id") @db.Uuid
+  direction      GoalMovementDirection
+  amountInCents  Int                   @map("amount_in_cents")
+  occurredAt     DateTime              @map("occurred_at") @db.Timestamptz(3)
+  reachedTarget  Boolean               @default(false) @map("reached_target")
+  idempotencyKey String?               @map("idempotency_key") @db.VarChar(64)
+  goal           SavingsGoal           @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, idempotencyKey])
+  @@index([goalId, occurredAt(sort: Desc), id(sort: Desc)])
+  @@map("gamification_goal_movements")
+}
+
+// The betting ceiling: one per user, created on the first choice, and every
+// value it has had — closed months stay measured against their own ceiling.
+
+model BettingCeiling {
+  id        String        @id @db.Uuid
+  userId    String        @unique @map("user_id") @db.Uuid
+  createdAt DateTime      @map("created_at") @db.Timestamptz(3)
+  version   Int           @default(0)
+  terms     CeilingTerm[]
+
+  @@map("gamification_betting_ceilings")
+}
+
+/// `destination` is null when the user said nothing about where the money should go.
+model CeilingTerm {
+  id            String         @id @db.Uuid
+  ceilingId     String         @map("ceiling_id") @db.Uuid
+  amountInCents Int            @map("amount_in_cents")
+  destination   String?        @db.VarChar(60)
+  /// A São Paulo month, `YYYY-MM`.
+  effectiveFrom String         @map("effective_from") @db.Char(7)
+  setAt         DateTime       @map("set_at") @db.Timestamptz(3)
+  ceiling       BettingCeiling @relation(fields: [ceilingId], references: [id], onDelete: Cascade)
+
+  @@unique([ceilingId, effectiveFrom])
+  @@map("gamification_ceiling_terms")
+}
+
 // ---------------------------------------------------------------------------
 // notifications — delivery of nudges and achievements
 //

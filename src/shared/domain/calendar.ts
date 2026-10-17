@@ -103,6 +103,17 @@ export class Calendar {
     return this.shiftedMonthKey(monthKey, -1);
   }
 
+  /**
+   * Whole local days left in the month after the day of `instant`: zero on its
+   * last day. Rounded, so a daylight-saving hour cannot shave a day off.
+   */
+  daysRemainingInMonth(instant: Date): number {
+    const startOfToday = this.startOfDay(this.dayKeyOf(instant));
+    const startOfNextMonth = this.startOfMonthAfter(this.monthKeyOf(instant));
+
+    return Math.round((startOfNextMonth.getTime() - startOfToday.getTime()) / MILLISECONDS_IN_A_DAY) - 1;
+  }
+
   /** How many whole calendar months separate the two instants. */
   monthsBetween(earlier: Date, later: Date): number {
     const from = this.partsOf(earlier);

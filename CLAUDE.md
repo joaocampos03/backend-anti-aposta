@@ -327,7 +327,12 @@ JSON field names and column names — never invent synonyms.
 | Casa de apostas             | `Bookmaker`       | Betting operator, identified by CNPJ/MCC                       |
 | Reenquadramento (reframing) | `Reframing`       | Translating an amount into future-yield equivalents            |
 | Alerta / nudge              | `AwarenessNudge`  | The System 2 intervention shown to the user                    |
-| Meta                        | `Goal`            | User-defined savings target                                    |
+| Meta                        | `Goal`            | What the screen calls both kinds below — never a code type on its own |
+| Meta de dinheiro            | `SavingsGoal`     | Self-reported savings target; balance summed from its movements, never stored |
+| Lançamento da meta          | `GoalMovement`    | One `DEPOSIT` or `WITHDRAWAL` the user recorded; append-only    |
+| Teto de apostas             | `BettingCeiling`  | The user's monthly maximum on betting spend, measured against the statement |
+| Vigência do teto            | `CeilingTerm`     | One value of the ceiling and the São Paulo month it starts governing |
+| Mês medido                  | `CeilingCycle`    | One month against the ceiling in force in it: `ACTIVE`, `REACHED` or `MISSED` |
 | Sequência sem apostas       | `Streak`          | Consecutive bet-free days                                      |
 | Conquista                   | `Badge`           | Awarded milestone                                              |
 | Rendimento equivalente      | `YieldEquivalent` | What the amount would earn in fixed income                     |

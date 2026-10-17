@@ -171,6 +171,29 @@ import {
 import type { NotificationsRouteDependencies } from '@modules/notifications/http/notifications.routes.js';
 import { PrismaBadgeCollectionRepository } from '@modules/gamification/infrastructure/prisma-badge-collection.repository.js';
 import { PrismaStreakRepository } from '@modules/gamification/infrastructure/prisma-streak.repository.js';
+import { CreateSavingsGoal } from '@modules/gamification/application/create-savings-goal.use-case.js';
+import { DescribeBettingCeiling } from '@modules/gamification/application/describe-betting-ceiling.use-case.js';
+import { gamificationFailures } from '@modules/gamification/application/gamification.failures.js';
+import { GAMIFICATION_MESSAGES } from '@modules/gamification/application/gamification.messages.js';
+import { ListGoalMovements } from '@modules/gamification/application/list-goal-movements.use-case.js';
+import { ListSavingsGoals } from '@modules/gamification/application/list-savings-goals.use-case.js';
+import { RecordGoalMovement } from '@modules/gamification/application/record-goal-movement.use-case.js';
+import { SetBettingCeiling } from '@modules/gamification/application/set-betting-ceiling.use-case.js';
+import { AwarenessYieldCalculator as GamificationYieldCalculator } from '@modules/gamification/infrastructure/awareness-yield-calculator.js';
+import { OpenFinanceMonthlyBetHistoryReader } from '@modules/gamification/infrastructure/open-finance-monthly-bet-history-reader.js';
+import { PrismaBettingCeilingRepository } from '@modules/gamification/infrastructure/prisma-betting-ceiling.repository.js';
+import { PrismaSavingsGoalRepository } from '@modules/gamification/infrastructure/prisma-savings-goal.repository.js';
+import { PrismaSavingsGoalLedgerQuery } from '@modules/gamification/infrastructure/savings-goal-ledger.query.js';
+import { GamificationController } from '@modules/gamification/http/gamification.controller.js';
+import type { GamificationRouteDependencies } from '@modules/gamification/http/gamification.routes.js';
+import {
+  createSavingsGoalBodySchema,
+  goalIdParamsSchema,
+  idempotencyHeadersSchema,
+  pageQuerySchema,
+  recordMovementBodySchema,
+  setBettingCeilingBodySchema,
+} from '@modules/gamification/http/gamification.schemas.js';
 import { AuthorisedConsentQuery } from '@modules/open-finance/index.js';
 import type { Clock } from '@shared/application/clock.port.js';
 import { InProcessEventBus } from '@shared/infrastructure/in-process-event-bus.js';
@@ -180,7 +203,7 @@ import { UuidV7IdGenerator } from '@shared/infrastructure/uuid-v7-id-generator.j
 import { windowedRateLimit } from '@shared/http/rate-limit.js';
 import { Calendar } from '@shared/domain/calendar.js';
 import { requireSession } from '@shared/http/require-session.js';
-import { validateBody, validateParams, validateQuery } from '@shared/http/validate.js';
+import { validateBody, validateHeaders, validateParams, validateQuery } from '@shared/http/validate.js';
 import type { AppDependencies } from './create-app.js';
 
 const MINUTES_IN_AN_HOUR = 60;
@@ -198,6 +221,8 @@ export interface ContainerSettings {
   readonly signInAttemptsPerQuarterHour: number;
   readonly passwordResetAttemptsPerHour: number;
   readonly consentCommandsPerHour: number;
+  /** Creating savings goals, recording movements and setting the ceiling. */
+  readonly goalCommandsPerHour: number;
   readonly sandboxLedgerEntriesPerHour: number;
   /** The demonstration console's sends, so a script cannot flood somebody's screen. */
   readonly demoNotificationsPerHour: number;
@@ -633,6 +658,16 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       controller: new AwarenessController(evaluateSupportOffer),
       requireSession: sessionGuard,
     },
+    gamification: buildGamification({
+      input,
+      clock,
+      idGenerator,
+      calendar,
+      events: eventBus,
+      summariseSpendByMonth,
+      reframing,
+      sessionGuard,
+    }),
     notifications: buildNotifications({
       input,
       delivery: notificationDelivery,
@@ -641,6 +676,73 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       yields: new NotificationsYieldCalculator(reframing),
       sessionGuard,
     }),
+  };
+}
+
+interface GamificationWiring {
+  readonly input: ContainerInput;
+  readonly clock: Clock;
+  readonly idGenerator: UuidV7IdGenerator;
+  readonly calendar: Calendar;
+  readonly events: InProcessEventBus;
+  readonly summariseSpendByMonth: SummariseSpendByMonth;
+  readonly reframing: AmountReframing;
+  readonly sessionGuard: RequestHandler;
+}
+
+/**
+ * The goals screen. Savings goals are this context's own ledger; the betting
+ * ceiling is measured against `open-finance`'s monthly summary — the very use
+ * case the charts read — and reframed by `awareness`. Two read-only queries
+ * across two boundaries, each through a port here and an adapter there.
+ */
+function buildGamification(wiring: GamificationWiring): GamificationRouteDependencies {
+  const { input, clock, idGenerator, calendar, events } = wiring;
+  const goals = new PrismaSavingsGoalRepository(input.prisma);
+  const ledger = new PrismaSavingsGoalLedgerQuery(input.prisma);
+  const ceilings = new PrismaBettingCeilingRepository(input.prisma);
+  const inputs = {
+    createSavingsGoalBody: validateBody(createSavingsGoalBodySchema, gamificationFailures.validationFailed),
+    recordMovementBody: validateBody(recordMovementBodySchema, gamificationFailures.validationFailed),
+    setBettingCeilingBody: validateBody(setBettingCeilingBodySchema, gamificationFailures.validationFailed),
+    goalIdParams: validateParams(goalIdParamsSchema, gamificationFailures.validationFailed),
+    pageQuery: validateQuery(pageQuerySchema, gamificationFailures.listInvalid),
+    idempotencyHeaders: validateHeaders(idempotencyHeadersSchema, gamificationFailures.validationFailed),
+  };
+
+  return {
+    controller: new GamificationController(
+      {
+        createSavingsGoal: new CreateSavingsGoal(goals, idGenerator, clock),
+        listSavingsGoals: new ListSavingsGoals(ledger),
+        listGoalMovements: new ListGoalMovements(ledger),
+        recordGoalMovement: new RecordGoalMovement({ goals, idGenerator, clock, events }),
+        describeBettingCeiling: new DescribeBettingCeiling({
+          ceilings,
+          history: new OpenFinanceMonthlyBetHistoryReader(wiring.summariseSpendByMonth),
+          yields: new GamificationYieldCalculator(wiring.reframing),
+          calendar,
+          clock,
+        }),
+        setBettingCeiling: new SetBettingCeiling({ ceilings, idGenerator, clock, calendar, events }),
+      },
+      inputs,
+    ),
+    requireSession: wiring.sessionGuard,
+    validateCreateSavingsGoalBody: inputs.createSavingsGoalBody.middleware,
+    validateRecordMovementBody: inputs.recordMovementBody.middleware,
+    validateSetBettingCeilingBody: inputs.setBettingCeilingBody.middleware,
+    validateGoalIdParams: inputs.goalIdParams.middleware,
+    validatePageQuery: inputs.pageQuery.middleware,
+    validateIdempotencyHeaders: inputs.idempotencyHeaders.middleware,
+    commandRateLimits: [
+      windowedRateLimit({
+        code: 'TOO_MANY_ATTEMPTS',
+        message: GAMIFICATION_MESSAGES.tooManyAttempts,
+        limit: input.settings.goalCommandsPerHour,
+        windowInMinutes: MINUTES_IN_AN_HOUR,
+      }),
+    ],
   };
 }
 

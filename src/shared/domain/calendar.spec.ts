@@ -86,6 +86,20 @@ describe('Calendar', () => {
     });
   });
 
+  describe('days remaining in the month', () => {
+    it('counts the whole local days after today', () => {
+      expect(SAO_PAULO.daysRemainingInMonth(new Date('2026-10-17T15:00:00.000Z'))).toBe(14);
+    });
+
+    it('is zero on the last local day, even when UTC is already in the next month', () => {
+      expect(SAO_PAULO.daysRemainingInMonth(new Date('2026-11-01T02:30:00.000Z'))).toBe(0);
+    });
+
+    it('knows February is short', () => {
+      expect(SAO_PAULO.daysRemainingInMonth(new Date('2027-02-01T15:00:00.000Z'))).toBe(27);
+    });
+  });
+
   describe('other timezones', () => {
     it('is not hardcoded to São Paulo', () => {
       const lisbon = new Calendar('Europe/Lisbon');

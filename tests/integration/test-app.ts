@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS: ContainerSettings = {
   passwordResetAttemptsPerHour: 10_000,
   classificationOverridesPerHour: 10_000,
   consentCommandsPerHour: 10_000,
+  goalCommandsPerHour: 10_000,
   sandboxLedgerEntriesPerHour: 10_000,
   demoNotificationsPerHour: 10_000,
 };

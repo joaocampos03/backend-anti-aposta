@@ -25,6 +25,7 @@ const app = createApp(
       passwordResetAttemptsPerHour: env.PASSWORD_RESET_ATTEMPTS_PER_HOUR,
       classificationOverridesPerHour: env.CLASSIFICATION_OVERRIDES_PER_HOUR,
       consentCommandsPerHour: env.CONSENT_COMMANDS_PER_HOUR,
+      goalCommandsPerHour: env.GOAL_COMMANDS_PER_HOUR,
       sandboxLedgerEntriesPerHour: env.SANDBOX_BANK_LEDGER_ENTRIES_PER_HOUR,
       demoNotificationsPerHour: env.DEMO_NOTIFICATIONS_PER_HOUR,
     },
