@@ -111,6 +111,42 @@ export function validateQuery<TValue>(
   };
 }
 
+/**
+ * The same contract for request headers, which Node lower-cases — so the schema
+ * names them in lower case (`'idempotency-key'`).
+ */
+export function validateHeaders<TValue>(
+  schema: ZodType<TValue>,
+  onInvalid: (details: AppErrorDetails) => AppError,
+): ValidatedInput<TValue> {
+  const parsedHeaders = new WeakMap<Request, TValue>();
+
+  return {
+    middleware: (request, _response, next) => {
+      const parsed = schema.safeParse(request.headers);
+
+      if (!parsed.success) {
+        next(onInvalid(detailsFrom(parsed.error)));
+
+        return;
+      }
+
+      parsedHeaders.set(request, parsed.data);
+      next();
+    },
+
+    read: (request) => {
+      const parsed = parsedHeaders.get(request);
+
+      if (parsed === undefined) {
+        throw new Error('Route is missing its validate middleware');
+      }
+
+      return parsed;
+    },
+  };
+}
+
 /** The same contract for path parameters, which Express types loosely. */
 export function validateParams<TValue>(
   schema: ZodType<TValue>,

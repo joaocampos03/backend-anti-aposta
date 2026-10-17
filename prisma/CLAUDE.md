@@ -65,6 +65,20 @@ aggregates enforce in memory:
 | `sandbox_bank_consents_authorised_names_its_accounts`       | an authorised consent names a customer and shares at least one account |
 | `open_finance_authorisation_requests_expires_after_creation` | an OAuth round trip cannot expire before it opens |
 
+`20261017224927_gamification_goals_check_constraints` adds the goals':
+
+| Constraint                                              | The invariant it mirrors                          |
+| ------------------------------------------------------- | ------------------------------------------------- |
+| `gamification_savings_goals_title_within_bounds`        | `GoalTitle`: trimmed, 3 to 60 characters          |
+| `gamification_savings_goals_target_within_bounds`       | `GoalAmount`: positive, at most R$ 10.000.000,00  |
+| `gamification_goal_movements_amount_within_bounds`      | a movement of nothing is not one                  |
+| `gamification_ceiling_terms_amount_within_bounds`       | `CeilingAmount`: zero allowed, never negative     |
+| `gamification_ceiling_terms_destination_not_blank`      | `CeilingDestination`: absent or trimmed words     |
+| `gamification_ceiling_terms_effective_from_is_a_month`  | `effective_from` is a `YYYY-MM` key               |
+
+`gamification_savings_goals.version` and `gamification_betting_ceilings.version` are live optimistic
+locks: the repository updates `WHERE version = n` and a lost race surfaces as `409`.
+
 **External ids** (`open_finance_*.external_id`, `external_consent_id`) were added NOT NULL by
 add → backfill → require in one migration: rows that predate the flow were never fetched from a
 DataHolder, so their own id is the only external id they have.

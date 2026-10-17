@@ -5,7 +5,7 @@
 | Context         | State                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------- |
 | `identity`      | **Implemented**: `User`, `Session`, `Credential`, `RegistrationConsent`, `SignInThrottle`, `PasswordResetToken` — registration, sign-in, sign-out, session resolution and password reset. Recovery *requests* wait on a mail decision. |
-| `gamification`  | Bootstrap only: `Streak` at zero days and an empty `BadgeCollection` on `UserRegistered`. No scoring, no awarding yet. |
+| `gamification`  | **Goals implemented**: `SavingsGoal` (self-reported ledger, `/savings-goals`) and `BettingCeiling` (`/betting-ceiling`, measured against `open-finance`'s monthly summary, reframed by `awareness`). `Streak` and `BadgeCollection` are still bootstrap only — no scoring, no awarding yet. |
 | `notifications` | **Implemented**: `Inbox` and `Notification`, persisted and pushed per user over SSE (`GET /notifications/stream`, replay by `Last-Event-ID`); announces `TransactionsIngested`; a demo-only console that sends to a user by id. Nudges and badges arrive from their own features. |
 | `open-finance`  | **Implemented**: `Consent`, `AuthorisationRequest`, `ConnectedAccount`, `Transaction`; the OAuth 2.0 + PKCE client against the DataHolder, synchronisation over HTTP, revocation; the statement and the charts as read models. |
 | `bet-detection` | **Implemented**: the three-policy chain, `Bookmaker`, `TransactionClassification` and the correction; `BookmakerIdentity` and the betting summary (`GET /bets/summary`), which it composes from the other two contexts. The only context that may read a raw statement line, and the only one that knows a CNPJ. |
@@ -67,6 +67,15 @@ bet-detection.ClassifyTransaction
 bet-detection.ReclassifyTransaction / RevertReclassification
   -> BetClassificationOverridden { userId, transactionId, verdict }
        -> open-finance.ProjectClassification     # the correction reaches every figure
+
+gamification.RecordGoalMovement
+  -> SavingsGoalReached { userId, goalId, reachedAt }        # once per goal; no subscriber yet
+gamification.SetBettingCeiling
+  -> BettingCeilingSet { userId, ceilingId, effectiveFromMonthKey, setAt }   # audit
+
+gamification.DescribeBettingCeiling reads, never writes, across two boundaries:
+  open-finance.SummariseSpendByMonth   (the charts' own months)  via OpenFinanceMonthlyBetHistoryReader
+  awareness.AmountReframing            (the rate)                via AwarenessYieldCalculator
 
 open-finance.RevokeConsent
   -> ConsentRevoked { userId, consentId, revokedAt }

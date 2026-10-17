@@ -44,6 +44,8 @@ const environmentSchema = z.object({
   CLASSIFICATION_OVERRIDES_PER_HOUR: z.coerce.number().int().positive().default(30),
   /** Starting, completing and synchronising a consent: each one calls the DataHolder. */
   CONSENT_COMMANDS_PER_HOUR: z.coerce.number().int().positive().default(60),
+  /** Creating goals, recording movements and setting the ceiling, so a script cannot flood a ledger. */
+  GOAL_COMMANDS_PER_HOUR: z.coerce.number().int().positive().default(120),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

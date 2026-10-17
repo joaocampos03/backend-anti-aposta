@@ -29,6 +29,10 @@ import {
   type SandboxBankRouteDependencies,
 } from '@modules/sandbox-bank/http/sandbox-bank.routes.js';
 import {
+  gamificationRoutes,
+  type GamificationRouteDependencies,
+} from '@modules/gamification/http/gamification.routes.js';
+import {
   notificationsRoutes,
   type NotificationsRouteDependencies,
 } from '@modules/notifications/http/notifications.routes.js';
@@ -55,6 +59,7 @@ export interface AppDependencies {
   readonly betDetection: BetDetectionRouteDependencies;
   readonly awareness: AwarenessRouteDependencies;
   readonly sandboxBank: SandboxBankRouteDependencies;
+  readonly gamification: GamificationRouteDependencies;
   readonly notifications: NotificationsRouteDependencies;
 }
 
@@ -76,6 +81,7 @@ export function createApp(dependencies: AppDependencies): Express {
   app.use(API_PREFIX, openFinanceRoutes(dependencies.openFinance));
   app.use(API_PREFIX, betDetectionRoutes(dependencies.betDetection));
   app.use(API_PREFIX, awarenessRoutes(dependencies.awareness));
+  app.use(API_PREFIX, gamificationRoutes(dependencies.gamification));
   app.use(API_PREFIX, notificationsRoutes(dependencies.notifications));
   app.use(SANDBOX_PREFIX, sandboxBankRoutes(dependencies.sandboxBank));
 
