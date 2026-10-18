@@ -5,14 +5,14 @@ the migration that stores it.
 
 ## Naming
 
-Prisma models are `PascalCase` and singular (`User`, `Session`, `Streak`); tables and columns are
+Prisma models are `PascalCase` and singular (`User`, `Session`, `Badge`); tables and columns are
 `snake_case` through `@@map` / `@map`; every table is prefixed by its owning context
-(`identity_users`, `gamification_streaks`, `open_finance_consents`) so ownership is visible in
+(`identity_users`, `gamification_badges`, `open_finance_consents`) so ownership is visible in
 `psql`. Postgres enums are mapped too (`identity_registration_consent_scope`).
 
 ## Hard rules
 
-- **No foreign key crosses a context.** `gamification_streaks.user_id` is a bare `uuid`, and so is
+- **No foreign key crosses a context.** `gamification_badge_collections.user_id` is a bare `uuid`, and so is
   every `sandbox_bank_*.customer_id`. Relations exist only inside one context — identity's
   sessions, gamification's badges, `open_finance_*` hanging off `open_finance_consents`, and
   `sandbox_bank_ledger_entries → sandbox_bank_accounts`.
@@ -28,8 +28,10 @@ Prisma models are `PascalCase` and singular (`User`, `Session`, `Streak`); table
 - Secrets are never stored in clear. Bank tokens and the PKCE verifier are AES-256-GCM ciphertext
   (`*_ciphertext`, prefixed `v1.`); codes, tokens and `state` the platform only has to *match* are
   SHA-256 fingerprints (`*_fingerprint`).
-- `version` columns on `gamification_streaks` and `gamification_badge_collections` exist for
-  optimistic locking when those aggregates start being updated by concurrent requests.
+- `version` on `gamification_badge_collections` is the optimistic lock between the screen's read
+  and an event reaction awarding the same person's badges at once. There is no streak table: the
+  streak is derived on read, and `20261018000000_retire_gamification_streaks` dropped the old one
+  together with its two CHECK constraints listed below.
 - No triggers, no stored procedures, no computed business columns. `DEFAULT` and `CHECK` guarding a
   data invariant are the exception.
 

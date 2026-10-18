@@ -16,7 +16,7 @@ of truth; the SSE stream is an optimisation over it.
 | Kind | Fields | Comes from |
 | --- | --- | --- |
 | `AWARENESS_NUDGE` | `merchant`, `amountInCents`, `yieldInCents`, `annualRatePercent`, `monthlyTotalInCents`, `matchedBy` | the demo console today; `BetTransactionDetected` once nudges land |
-| `BADGE_AWARDED` | `badgeId`, `title`, `description` | the demo console today; `BadgeAwarded` later |
+| `BADGE_AWARDED` | `badgeId`, `title`, `description` | `gamification.BadgesAwarded` (one per evaluation, worded there), and the demo console |
 | `STREAK_BROKEN` | `previousDays` | the demo console today; `StreakBroken` later |
 | `GOAL_REACHED` | `label`, `amountInCents` | the demo console today |
 | `TRANSACTIONS_INGESTED` | `ingestedCount` | `open-finance.TransactionsIngested`, from any synchronisation |

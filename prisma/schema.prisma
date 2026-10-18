@@ -360,23 +360,15 @@ model ReferenceItem {
 }
 
 // ---------------------------------------------------------------------------
-// gamification — streaks, badges, savings goals
+// gamification — badges, savings goals, the betting ceiling
 //
-// Both aggregates are created empty when `UserRegistered` arrives, so no screen
-// has to tell "no aggregate at all" from "empty aggregate".
+// The badge collection is created empty when `UserRegistered` arrives, so no
+// screen has to tell "no aggregate at all" from "empty aggregate". There is no
+// streak table: the bet-free streak is derived from the statement on every read.
 // ---------------------------------------------------------------------------
 
-model Streak {
-  id          String   @id @db.Uuid
-  userId      String   @unique @map("user_id") @db.Uuid
-  currentDays Int      @default(0) @map("current_days")
-  longestDays Int      @default(0) @map("longest_days")
-  startedAt   DateTime @map("started_at") @db.Timestamptz(3)
-  version     Int      @default(0)
-
-  @@map("gamification_streaks")
-}
-
+/// `version` is the optimistic lock: the screen's read and an event reaction can
+/// award badges to the same person at the same moment.
 model BadgeCollection {
   id        String   @id @db.Uuid
   userId    String   @unique @map("user_id") @db.Uuid

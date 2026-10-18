@@ -4,6 +4,7 @@ import type { Result } from '@shared/domain/result.js';
 import { callerOf } from '@shared/http/require-session.js';
 import type { ValidatedBody, ValidatedInput } from '@shared/http/validate.js';
 import type { CreateSavingsGoal } from '../application/create-savings-goal.use-case.js';
+import type { DescribeAchievements } from '../application/describe-achievements.use-case.js';
 import type { DescribeBettingCeiling } from '../application/describe-betting-ceiling.use-case.js';
 import type { ListGoalMovements } from '../application/list-goal-movements.use-case.js';
 import type { ListSavingsGoals } from '../application/list-savings-goals.use-case.js';
@@ -29,6 +30,7 @@ export interface GamificationUseCases {
   readonly recordGoalMovement: RecordGoalMovement;
   readonly describeBettingCeiling: DescribeBettingCeiling;
   readonly setBettingCeiling: SetBettingCeiling;
+  readonly describeAchievements: DescribeAchievements;
 }
 
 export interface GamificationInputs {
@@ -120,6 +122,15 @@ export class GamificationController {
     respond(response, next, result, (overview) => ({
       status: OK,
       body: GamificationPresenter.ceilingOverview(overview),
+    }));
+  };
+
+  readonly describeAchievements: RequestHandler = async (_request, response, next) => {
+    const result = await this.useCases.describeAchievements.execute({ userId: callerOf(response) });
+
+    respond(response, next, result, (output) => ({
+      status: OK,
+      body: GamificationPresenter.achievements(output),
     }));
   };
 

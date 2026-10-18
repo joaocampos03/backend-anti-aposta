@@ -34,3 +34,11 @@ export interface ReplayNotificationsInput {
   /** The browser's `Last-Event-ID`, or null on a fresh connection. */
   readonly lastSeenId: string | null;
 }
+
+/** Already worded by `gamification`, which owns what a badge is called and what earned it. */
+export interface AnnounceAwardedBadgeInput {
+  readonly userId: string;
+  readonly badgeId: string;
+  readonly title: string;
+  readonly description: string;
+}

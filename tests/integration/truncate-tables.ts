@@ -13,7 +13,6 @@ const TABLES = [
   'open_finance_connected_accounts',
   'gamification_badges',
   'gamification_badge_collections',
-  'gamification_streaks',
   'gamification_goal_movements',
   'gamification_savings_goals',
   'gamification_ceiling_terms',

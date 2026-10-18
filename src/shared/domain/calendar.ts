@@ -95,6 +95,14 @@ export class Calendar {
     return this.startOfMonth(this.monthKeyAfter(monthKey));
   }
 
+  /** Calendar arithmetic on the key itself, so no daylight-saving hour can skip or repeat a day. */
+  dayKeyBefore(dayKey: DayKey): DayKey {
+    const [year = 0, month = 1, day = 1] = dayKey.split('-').map(Number);
+    const previous = new Date(Date.UTC(year, month - 1, day - 1));
+
+    return `${padded(previous.getUTCFullYear(), 4)}-${padded(previous.getUTCMonth() + 1)}-${padded(previous.getUTCDate())}`;
+  }
+
   monthKeyAfter(monthKey: MonthKey): MonthKey {
     return this.shiftedMonthKey(monthKey, 1);
   }

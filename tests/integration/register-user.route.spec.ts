@@ -233,17 +233,15 @@ describe('POST /api/v1/identity/users', () => {
     expect(response.status).toBe(429);
   });
 
-  it('bootstraps an empty streak at zero days, an empty badge collection and an inbox', async () => {
+  it('bootstraps an empty badge collection and an inbox, awarding nothing for signing up', async () => {
     const response = await request(createTestApp()).post(REGISTER_PATH).send(VALID_REGISTRATION);
     const userId: string = response.body.user.id;
 
-    const streak = await prisma.streak.findUniqueOrThrow({ where: { userId } });
     const collection = await prisma.badgeCollection.findUniqueOrThrow({
       where: { userId },
       include: { badges: true },
     });
 
-    expect(streak.currentDays).toBe(0);
     expect(collection.badges).toEqual([]);
     expect(await prisma.inbox.count({ where: { userId } })).toBe(1);
   });

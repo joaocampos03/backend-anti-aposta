@@ -19,6 +19,11 @@ describe('Calendar', () => {
     it('answers the local day for a midday instant', () => {
       expect(SAO_PAULO.dayKeyOf(new Date('2026-08-07T15:00:00.000Z'))).toBe('2026-08-07');
     });
+
+    it('steps back across a month and a year boundary', () => {
+      expect(SAO_PAULO.dayKeyBefore('2026-03-01')).toBe('2026-02-28');
+      expect(SAO_PAULO.dayKeyBefore('2026-01-01')).toBe('2025-12-31');
+    });
   });
 
   describe('month keys', () => {
