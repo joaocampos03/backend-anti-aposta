@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaTransactionClient } from '@shared/infrastructure/prisma.js';
+import type { ReachedGoalsReader } from '../application/ports/reached-goals-reader.port.js';
 import type {
   GoalMovementRow,
   Page,
@@ -7,6 +8,7 @@ import type {
   SavingsGoalLedgerQuery,
   SavingsGoalSummaryRow,
 } from '../application/ports/savings-goal-ledger.query.port.js';
+import type { ReachedGoals } from '../domain/badge-attainment.js';
 import { GOAL_PURPOSES, type GoalPurpose } from '../domain/goal-purpose.js';
 
 interface RawGoalSummaryRow {
@@ -61,8 +63,24 @@ function paged<TRow>(
  * append-only movements the aggregate sums in memory, so the list and the
  * card after a deposit cannot disagree. Every question is scoped by owner.
  */
-export class PrismaSavingsGoalLedgerQuery implements SavingsGoalLedgerQuery {
+export class PrismaSavingsGoalLedgerQuery implements SavingsGoalLedgerQuery, ReachedGoalsReader {
   constructor(private readonly client: PrismaTransactionClient) {}
+
+  /** Ever reached, which `reached_at` records once and never clears — a goal drawn down since still counts. */
+  async reachedGoalsOf(userId: string, titleLimit: number): Promise<ReachedGoals> {
+    const where = { userId, reachedAt: { not: null } };
+    const [count, newest] = await Promise.all([
+      this.client.savingsGoal.count({ where }),
+      this.client.savingsGoal.findMany({
+        where,
+        orderBy: [{ reachedAt: 'desc' }, { id: 'desc' }],
+        take: titleLimit,
+        select: { title: true },
+      }),
+    ]);
+
+    return { count, titles: newest.map((goal) => goal.title) };
+  }
 
   async goalsOf(userId: string, limit: number, cursor: PageCursor | null): Promise<Page<SavingsGoalSummaryRow>> {
     const rows = await this.summaries(

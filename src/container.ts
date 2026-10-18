@@ -1,6 +1,13 @@
 import type { PrismaClient } from '@prisma/client';
 import type { RequestHandler } from 'express';
-import { CreateBadgeCollection, StartStreak } from '@modules/gamification/index.js';
+import {
+  announceAwardedBadges,
+  BadgesAwarded,
+  CreateBadgeCollection,
+  EvaluateBadges,
+  ForgetMeasuredBadges,
+  SavingsGoalReached,
+} from '@modules/gamification/index.js';
 import { UserRegistered } from '@modules/identity/index.js';
 import { RegisterUser } from '@modules/identity/application/register-user.use-case.js';
 import { ResetPassword } from '@modules/identity/application/reset-password.use-case.js';
@@ -63,6 +70,7 @@ import {
   ListConnectedAccounts,
   ListTransactions,
   ProjectClassification,
+  PrismaBetDayQuery,
   PrismaBettingWindowQuery,
   PrismaCategorySpendQuery,
   PrismaMonthlyBetSpendQuery,
@@ -153,7 +161,11 @@ import {
 } from '@modules/sandbox-bank/http/sandbox-bank.schemas.js';
 import type { SandboxBankRouteDependencies } from '@modules/sandbox-bank/http/sandbox-bank.routes.js';
 import { SessionCallerResolver } from '@modules/identity/http/session-caller-resolver.js';
-import { AnnounceIngestedTransactions, CreateInbox } from '@modules/notifications/index.js';
+import {
+  AnnounceAwardedBadge,
+  AnnounceIngestedTransactions,
+  CreateInbox,
+} from '@modules/notifications/index.js';
 import { NotificationDelivery } from '@modules/notifications/application/notification-delivery.js';
 import { NOTIFICATIONS_MESSAGES } from '@modules/notifications/application/notifications.messages.js';
 import { notificationsFailures } from '@modules/notifications/application/notifications.failures.js';
@@ -170,7 +182,10 @@ import {
 } from '@modules/notifications/http/notifications.schemas.js';
 import type { NotificationsRouteDependencies } from '@modules/notifications/http/notifications.routes.js';
 import { PrismaBadgeCollectionRepository } from '@modules/gamification/infrastructure/prisma-badge-collection.repository.js';
-import { PrismaStreakRepository } from '@modules/gamification/infrastructure/prisma-streak.repository.js';
+import { AchievementsEvaluation } from '@modules/gamification/application/achievements-evaluation.js';
+import { BadgeAwarding } from '@modules/gamification/application/badge-awarding.js';
+import { DescribeAchievements } from '@modules/gamification/application/describe-achievements.use-case.js';
+import { OpenFinanceBetDayReader } from '@modules/gamification/infrastructure/open-finance-bet-day-reader.js';
 import { CreateSavingsGoal } from '@modules/gamification/application/create-savings-goal.use-case.js';
 import { DescribeBettingCeiling } from '@modules/gamification/application/describe-betting-ceiling.use-case.js';
 import { gamificationFailures } from '@modules/gamification/application/gamification.failures.js';
@@ -337,7 +352,6 @@ export function buildContainer(input: ContainerInput): AppDependencies {
 
   subscribeToRegistration({
     eventBus,
-    startStreak: new StartStreak(new PrismaStreakRepository(input.prisma), idGenerator, clock),
     createBadgeCollection: new CreateBadgeCollection(
       new PrismaBadgeCollectionRepository(input.prisma),
       idGenerator,
@@ -499,6 +513,29 @@ export function buildContainer(input: ContainerInput): AppDependencies {
   subscribeToIngestion({
     eventBus,
     announceIngestedTransactions: new AnnounceIngestedTransactions(notificationDelivery),
+  });
+
+  // Achievements are measured against the figures the other screens read. They
+  // subscribe after the projection, the ingestion announcement and the purge
+  // above, so an evaluation always reads what those handlers just wrote.
+  const achievements = buildAchievements({
+    input,
+    clock,
+    idGenerator,
+    calendar,
+    events: eventBus,
+    summariseSpendByMonth,
+  });
+
+  subscribeToAchievementTriggers({
+    eventBus,
+    evaluateBadges: achievements.evaluateBadges,
+    forgetMeasuredBadges: achievements.forgetMeasuredBadges,
+  });
+
+  subscribeToBadgeAwards({
+    eventBus,
+    announceAwardedBadge: new AnnounceAwardedBadge(notificationDelivery),
   });
 
   const synchroniseNotifiedConsent = new SynchroniseNotifiedConsent(
@@ -666,6 +703,7 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       events: eventBus,
       summariseSpendByMonth,
       reframing,
+      describeAchievements: achievements.describeAchievements,
       sessionGuard,
     }),
     notifications: buildNotifications({
@@ -687,6 +725,7 @@ interface GamificationWiring {
   readonly events: InProcessEventBus;
   readonly summariseSpendByMonth: SummariseSpendByMonth;
   readonly reframing: AmountReframing;
+  readonly describeAchievements: DescribeAchievements;
   readonly sessionGuard: RequestHandler;
 }
 
@@ -725,6 +764,7 @@ function buildGamification(wiring: GamificationWiring): GamificationRouteDepende
           clock,
         }),
         setBettingCeiling: new SetBettingCeiling({ ceilings, idGenerator, clock, calendar, events }),
+        describeAchievements: wiring.describeAchievements,
       },
       inputs,
     ),
@@ -743,6 +783,47 @@ function buildGamification(wiring: GamificationWiring): GamificationRouteDepende
         windowInMinutes: MINUTES_IN_AN_HOUR,
       }),
     ],
+  };
+}
+
+interface AchievementsWiring {
+  readonly input: ContainerInput;
+  readonly clock: Clock;
+  readonly idGenerator: UuidV7IdGenerator;
+  readonly calendar: Calendar;
+  readonly events: InProcessEventBus;
+  readonly summariseSpendByMonth: SummariseSpendByMonth;
+}
+
+interface Achievements {
+  readonly describeAchievements: DescribeAchievements;
+  readonly evaluateBadges: EvaluateBadges;
+  readonly forgetMeasuredBadges: ForgetMeasuredBadges;
+}
+
+/**
+ * The Conquistas screen and the reactions that award badges share one
+ * evaluation, so a badge is awarded on the arithmetic the screen shows. The
+ * reads that cross into `open-finance` — the charts' months and the bet days —
+ * go through ports here and adapters there.
+ */
+function buildAchievements(wiring: AchievementsWiring): Achievements {
+  const { input, clock, calendar } = wiring;
+  const collections = new PrismaBadgeCollectionRepository(input.prisma);
+  const evaluation = new AchievementsEvaluation({
+    history: new OpenFinanceMonthlyBetHistoryReader(wiring.summariseSpendByMonth),
+    betDays: new OpenFinanceBetDayReader(new PrismaBetDayQuery(input.prisma), calendar),
+    ceilings: new PrismaBettingCeilingRepository(input.prisma),
+    reachedGoals: new PrismaSavingsGoalLedgerQuery(input.prisma),
+    calendar,
+    clock,
+  });
+  const awarding = new BadgeAwarding({ collections, idGenerator: wiring.idGenerator, clock, events: wiring.events });
+
+  return {
+    describeAchievements: new DescribeAchievements(evaluation, awarding),
+    evaluateBadges: new EvaluateBadges(evaluation, awarding),
+    forgetMeasuredBadges: new ForgetMeasuredBadges(collections),
   };
 }
 
@@ -940,15 +1021,15 @@ function buildSandboxBank({
 
 interface RegistrationSubscribers {
   readonly eventBus: InProcessEventBus;
-  readonly startStreak: StartStreak;
   readonly createBadgeCollection: CreateBadgeCollection;
   readonly createInbox: CreateInbox;
 }
 
 /**
  * `UserRegistered` bootstraps an empty aggregate in each reacting context, so no
- * first-run screen has to tell "no aggregate" from "empty aggregate". The streak
- * starts at zero days, and nothing is pushed to the notification stream.
+ * first-run screen has to tell "no aggregate" from "empty aggregate". Nothing is
+ * awarded and nothing is pushed to the notification stream. There is no streak to
+ * start: it is derived from the statement on every read.
  *
  * Nothing subscribes to `UserSignedIn`, `UserSignedOut` or `PasswordChanged`:
  * they are recorded for audit, and **no notification is ever sent for a
@@ -963,7 +1044,6 @@ function subscribeToRegistration(subscribers: RegistrationSubscribers): void {
 
     const { userId } = event.payload;
 
-    await subscribers.startStreak.execute({ userId });
     await subscribers.createBadgeCollection.execute({ userId });
     await subscribers.createInbox.execute({ userId });
   });
@@ -1046,5 +1126,64 @@ function subscribeToIngestion(subscribers: IngestionSubscribers): void {
       userId: event.payload.userId,
       ingestedCount: event.payload.transactionIds.length,
     });
+  });
+}
+
+interface AchievementTriggerSubscribers {
+  readonly eventBus: InProcessEventBus;
+  readonly evaluateBadges: EvaluateBadges;
+  readonly forgetMeasuredBadges: ForgetMeasuredBadges;
+}
+
+/**
+ * A badge's figure moves when new transactions arrive, when a classification is
+ * corrected and when a savings goal is reached, so each of those re-evaluates
+ * the person's badges. Revocation forgets the badges measured in the statement
+ * it shared (LGPD art. 18); the recorded savings badges stay.
+ */
+function subscribeToAchievementTriggers(subscribers: AchievementTriggerSubscribers): void {
+  const evaluate = async (userId: string): Promise<void> => {
+    await subscribers.evaluateBadges.execute({ userId });
+  };
+
+  subscribers.eventBus.subscribe(TransactionsIngested.NAME, async (event) => {
+    if (event instanceof TransactionsIngested && event.payload.transactionIds.length > 0) {
+      await evaluate(event.payload.userId);
+    }
+  });
+  subscribers.eventBus.subscribe(BetClassificationOverridden.NAME, async (event) => {
+    if (event instanceof BetClassificationOverridden) await evaluate(event.payload.userId);
+  });
+  subscribers.eventBus.subscribe(SavingsGoalReached.NAME, async (event) => {
+    if (event instanceof SavingsGoalReached) await evaluate(event.payload.userId);
+  });
+  subscribers.eventBus.subscribe(ConsentRevoked.NAME, async (event) => {
+    if (event instanceof ConsentRevoked) {
+      await subscribers.forgetMeasuredBadges.execute({ userId: event.payload.userId });
+    }
+  });
+}
+
+interface BadgeAwardSubscribers {
+  readonly eventBus: InProcessEventBus;
+  readonly announceAwardedBadge: AnnounceAwardedBadge;
+}
+
+/**
+ * One `BADGE_AWARDED` per evaluation, worded by `gamification`, which owns what
+ * a badge is called and what earned it. The frontend opens it as the one modal
+ * that celebrates; a visit to the screen never does.
+ */
+function subscribeToBadgeAwards(subscribers: BadgeAwardSubscribers): void {
+  subscribers.eventBus.subscribe(BadgesAwarded.NAME, async (event) => {
+    if (!(event instanceof BadgesAwarded)) {
+      return;
+    }
+
+    const announcement = announceAwardedBadges(event.payload);
+
+    if (announcement !== null) {
+      await subscribers.announceAwardedBadge.execute(announcement);
+    }
   });
 }

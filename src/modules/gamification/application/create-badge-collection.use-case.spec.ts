@@ -22,7 +22,7 @@ describe('CreateBadgeCollection', () => {
   it('creates an empty collection, awarding nothing for signing up', async () => {
     await createBadgeCollection.execute({ userId: USER_ID });
 
-    expect(collections.collections[0]?.badges).toEqual([]);
+    expect(collections.collections[0]?.heldBadges).toEqual([]);
   });
 
   it('leaves a single collection when the same event arrives twice', async () => {

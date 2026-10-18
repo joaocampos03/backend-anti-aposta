@@ -17,7 +17,7 @@ export interface GamificationRouteDependencies {
 }
 
 /**
- * The goals screen. Two resources on purpose: a savings goal is what the user
+ * The goals and achievements screens. Two goal resources on purpose: a savings goal is what the user
  * records, the betting ceiling is measured from the statement, and the paths
  * keep them as apart as the screen does.
  */
@@ -81,6 +81,15 @@ export function gamificationRoutes(dependencies: GamificationRouteDependencies):
     ...dependencies.commandRateLimits,
     dependencies.validateSetBettingCeilingBody,
     dependencies.controller.setBettingCeiling,
+  );
+
+  // Reading also awards what fell due since the last look — a streak badge can
+  // become due only because a day passed. Idempotent: a badge is awarded once.
+  router.get(
+    '/achievements',
+    internalErrorMessage(GAMIFICATION_MESSAGES.achievementsUnavailable),
+    dependencies.requireSession,
+    dependencies.controller.describeAchievements,
   );
 
   return router;

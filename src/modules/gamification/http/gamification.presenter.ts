@@ -1,3 +1,12 @@
+import { assertNever } from '@shared/domain/assert-never.js';
+import type {
+  AchievementsOutput,
+  AttainmentEvidenceDto,
+  BadgeDto,
+  BetDayDto,
+  BetFreeStreakDto,
+  StreakRecordDto,
+} from '../application/dto/achievements.dto.js';
 import type {
   BettingCeilingOverviewOutput,
   CeilingCycleDto,
@@ -110,6 +119,83 @@ export class GamificationPresenter {
       },
       annualRatePercent: output.annualRatePercent,
     };
+  }
+
+  static achievements(output: AchievementsOutput): unknown {
+    return {
+      syncStatus: output.syncStatus,
+      todayKey: output.todayKey,
+      streak: output.streak === null ? null : GamificationPresenter.streak(output.streak),
+      badges: output.badges.map((badge) => GamificationPresenter.badge(badge)),
+    };
+  }
+
+  private static streak(streak: StreakRecordDto): unknown {
+    return {
+      window: { firstDayKey: streak.window.firstDayKey, dayCount: streak.window.dayCount },
+      current: {
+        days: streak.current.days,
+        hasBetToday: streak.current.hasBetToday,
+        startsBeforeWindow: streak.current.startsBeforeWindow,
+        lastBet: streak.current.lastBet === null ? null : GamificationPresenter.betDay(streak.current.lastBet),
+      },
+      longest: streak.longest === null ? null : GamificationPresenter.betFreeStreak(streak.longest),
+      closedStreaks: streak.closedStreaks.map((closed) => GamificationPresenter.betFreeStreak(closed)),
+      closedStreakCount: streak.closedStreakCount,
+      betDayCount: streak.betDayCount,
+      betFreeDayCount: streak.betFreeDayCount,
+      recentDays: streak.recentDays.map((day) => ({ dayKey: day.dayKey, hasBet: day.hasBet })),
+    };
+  }
+
+  private static betFreeStreak(streak: BetFreeStreakDto): unknown {
+    return {
+      lengthInDays: streak.lengthInDays,
+      firstDayKey: streak.firstDayKey,
+      lastDayKey: streak.lastDayKey,
+      startsBeforeWindow: streak.startsBeforeWindow,
+      endedBy: GamificationPresenter.betDay(streak.endedBy),
+    };
+  }
+
+  private static betDay(day: BetDayDto): unknown {
+    return { dayKey: day.dayKey, counterparty: day.counterparty, matchedBy: day.matchedBy };
+  }
+
+  private static badge(badge: BadgeDto): unknown {
+    return {
+      id: badge.id,
+      family: badge.family,
+      title: badge.title,
+      criterion: badge.criterion,
+      threshold: badge.threshold,
+      status: badge.status,
+      awardedAt: badge.awardedAt,
+      currentValue: badge.currentValue,
+      progressPercent: badge.progressPercent,
+      evidence: badge.evidence === null ? null : GamificationPresenter.evidence(badge.evidence),
+    };
+  }
+
+  private static evidence(evidence: AttainmentEvidenceDto): unknown {
+    switch (evidence.kind) {
+      case 'CURRENT_STREAK':
+        return { kind: evidence.kind, days: evidence.days, startsBeforeWindow: evidence.startsBeforeWindow };
+      case 'CLOSED_STREAK':
+        return {
+          kind: evidence.kind,
+          days: evidence.days,
+          firstDayKey: evidence.firstDayKey,
+          lastDayKey: evidence.lastDayKey,
+          startsBeforeWindow: evidence.startsBeforeWindow,
+        };
+      case 'MONTH_RUN':
+        return { kind: evidence.kind, months: evidence.months, lastMonthKey: evidence.lastMonthKey };
+      case 'REACHED_GOALS':
+        return { kind: evidence.kind, count: evidence.count, titles: [...evidence.titles] };
+      default:
+        return assertNever(evidence);
+    }
   }
 
   private static term(term: CeilingTermDto | null): unknown {

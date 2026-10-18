@@ -120,13 +120,13 @@ tests/integration/               # real Postgres, truncated between tests
 | `sandbox-bank`  | the simulated institution (DataHolder) + seeded data      | `BankAccount`, `LedgerEntry`   |
 | `bet-detection` | classifying transactions as gambling                      | `DetectionPolicy`, `Bookmaker` |
 | `awareness`     | System 2 reframing and nudges                             | `AwarenessNudge`, `Reframing`  |
-| `gamification`  | streaks, badges, savings goals                            | `Streak`, `Badge`, `Goal`      |
+| `gamification`  | streaks, badges, savings goals                            | `StreakRecord`, `BadgeCollection`, `SavingsGoal` |
 | `notifications` | delivery of nudges and achievements                       | `Notification`                 |
 
 ### Boundaries
 
 1. A module may import from another module **only** via that module's `index.ts`, and only the
-   types/DTOs it re-exports. Importing `@modules/gamification/domain/streak` from `awareness` is a
+   types/DTOs it re-exports. Importing `@modules/gamification/domain/streak-record` from `awareness` is a
    review blocker.
 2. Preferred cross-module communication is **domain events**, not direct calls. A direct call is
    acceptable only for a synchronous query the caller cannot proceed without.
@@ -142,10 +142,11 @@ tests/integration/               # real Postgres, truncated between tests
 ```
 sandbox-bank  --HTTP-->  open-finance.SynchroniseConsent      (pulled; also prompted by the bank's notice)
      -> TransactionsIngested                                  -> notifications (TRANSACTIONS_INGESTED)
+                                                              -> gamification.EvaluateBadges -> BadgesAwarded -> notifications
           -> bet-detection.ClassifyTransactions
                -> BetTransactionDetected
                     -> awareness.GenerateNudge   -> AwarenessNudgeGenerated -> notifications
-                    -> gamification.BreakStreak  -> StreakBroken            -> notifications
+                    (no streak event: the streak is derived from the bet days on every read)
 ```
 
 Events are published **after** the owning transaction commits, by the in-process bus in
@@ -333,7 +334,7 @@ JSON field names and column names — never invent synonyms.
 | Teto de apostas             | `BettingCeiling`  | The user's monthly maximum on betting spend, measured against the statement |
 | Vigência do teto            | `CeilingTerm`     | One value of the ceiling and the São Paulo month it starts governing |
 | Mês medido                  | `CeilingCycle`    | One month against the ceiling in force in it: `ACTIVE`, `REACHED` or `MISSED` |
-| Sequência sem apostas       | `Streak`          | Consecutive bet-free days                                      |
+| Sequência sem apostas       | `StreakRecord`    | Consecutive bet-free days, derived from the bet days on every read — never a stored counter |
 | Conquista                   | `Badge`           | Awarded milestone                                              |
 | Rendimento equivalente      | `YieldEquivalent` | What the amount would earn in fixed income                     |
 | Nome de exibição            | `DisplayName`     | How the person wants to be called in the app; never a legal name |

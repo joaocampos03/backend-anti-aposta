@@ -21,6 +21,8 @@ export { SummariseSpendByMonth } from './application/summarise-spend-by-month.us
 export { SyncStatusLookup } from './application/sync-status-lookup.js';
 export { TransactionAmountLookup } from './application/transaction-amount-lookup.js';
 export type { SyncStatus } from './domain/consent.js';
+export { PrismaBetDayQuery } from './infrastructure/bet-day.query.js';
+export type { BetDayEntry } from './infrastructure/bet-day.query.js';
 export { PrismaBettingWindowQuery } from './infrastructure/betting-window.query.js';
 export type { BetWindowEntry } from './infrastructure/betting-window.query.js';
 export { PrismaCategorySpendQuery } from './infrastructure/category-spend.query.js';

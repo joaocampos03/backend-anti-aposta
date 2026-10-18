@@ -1,5 +1,6 @@
 import { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
 import { SequentialIdGenerator } from '@shared/testing/sequential-id-generator.js';
+import { BadgeCollection } from '../domain/badge-collection.js';
 import { BettingCeiling } from '../domain/betting-ceiling.js';
 import { CeilingAmount } from '../domain/ceiling-amount.js';
 import { CeilingDestination } from '../domain/ceiling-destination.js';
@@ -81,5 +82,13 @@ export function chooseCeiling(ceiling: BettingCeiling, choice: ChoiceInMonth): s
     setAt: CREATED_AT,
     currentMonth: choice.currentMonth,
     nextMonth: choice.nextMonth,
+  });
+}
+
+export function anEmptyBadgeCollection(): BadgeCollection {
+  return BadgeCollection.empty({
+    id: ids.generate(),
+    userId: UniqueEntityId.restore(USER_ID),
+    createdAt: CREATED_AT,
   });
 }

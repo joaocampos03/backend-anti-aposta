@@ -5,7 +5,7 @@
 | Context         | State                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------- |
 | `identity`      | **Implemented**: `User`, `Session`, `Credential`, `RegistrationConsent`, `SignInThrottle`, `PasswordResetToken` — registration, sign-in, sign-out, session resolution and password reset. Recovery *requests* wait on a mail decision. |
-| `gamification`  | **Goals implemented**: `SavingsGoal` (self-reported ledger, `/savings-goals`) and `BettingCeiling` (`/betting-ceiling`, measured against `open-finance`'s monthly summary, reframed by `awareness`). `Streak` and `BadgeCollection` are still bootstrap only — no scoring, no awarding yet. |
+| `gamification`  | **Goals implemented**: `SavingsGoal` (self-reported ledger, `/savings-goals`) and `BettingCeiling` (`/betting-ceiling`, measured against `open-finance`'s monthly summary, reframed by `awareness`). **Achievements implemented** (`GET /achievements`): `StreakRecord`, derived from `open-finance`'s bet days on every read, and `BadgeCollection`, awarded on read and after ingestion, a correction or a reached goal, never revoked. |
 | `notifications` | **Implemented**: `Inbox` and `Notification`, persisted and pushed per user over SSE (`GET /notifications/stream`, replay by `Last-Event-ID`); announces `TransactionsIngested`; a demo-only console that sends to a user by id. Nudges and badges arrive from their own features. |
 | `open-finance`  | **Implemented**: `Consent`, `AuthorisationRequest`, `ConnectedAccount`, `Transaction`; the OAuth 2.0 + PKCE client against the DataHolder, synchronisation over HTTP, revocation; the statement and the charts as read models. |
 | `bet-detection` | **Implemented**: the three-policy chain, `Bookmaker`, `TransactionClassification` and the correction; `BookmakerIdentity` and the betting summary (`GET /bets/summary`), which it composes from the other two contexts. The only context that may read a raw statement line, and the only one that knows a CNPJ. |
@@ -16,7 +16,7 @@
 
 1. **One way in.** A module imports another only through its `index.ts`. ESLint enforces it; the one
    exception is `src/container.ts`, the composition root.
-2. **No foreign keys across contexts.** `gamification_streaks.user_id` is a raw `uuid` with no
+2. **No foreign keys across contexts.** `gamification_badge_collections.user_id` is a raw `uuid` with no
    relation to `identity_users`. Cascade deletion across contexts is a use case with tests, not a
    database trigger.
 3. **Events, not calls.** A direct call is acceptable only where an event cannot do the job — today
@@ -37,7 +37,6 @@
 ```
 identity.RegisterUser
   -> UserRegistered { userId, registeredAt }          # no name, no e-mail
-       -> gamification.StartStreak                    # zero days, never day one
        -> gamification.CreateBadgeCollection          # empty; participation is not a milestone
        -> notifications.CreateInbox                   # empty; no welcome message; delivery needs it
 
@@ -69,7 +68,19 @@ bet-detection.ReclassifyTransaction / RevertReclassification
        -> open-finance.ProjectClassification     # the correction reaches every figure
 
 gamification.RecordGoalMovement
-  -> SavingsGoalReached { userId, goalId, reachedAt }        # once per goal; no subscriber yet
+  -> SavingsGoalReached { userId, goalId, reachedAt }        # once per goal
+       -> gamification.EvaluateBadges
+
+open-finance.TransactionsIngested / bet-detection.BetClassificationOverridden
+       -> gamification.EvaluateBadges            # after the announcement / the projection
+
+gamification.DescribeAchievements (GET) / EvaluateBadges
+  -> BadgesAwarded { userId, awardedAt, awards[] }           # one per evaluation that awarded
+       -> notifications.AnnounceAwardedBadge     # ONE BADGE_AWARDED, worded by gamification
+
+gamification.DescribeAchievements / EvaluateBadges read, never write, across one boundary:
+  open-finance.SummariseSpendByMonth   (the charts' own months)  via OpenFinanceMonthlyBetHistoryReader
+  open-finance.PrismaBetDayQuery       (first bet of each day)   via OpenFinanceBetDayReader
 gamification.SetBettingCeiling
   -> BettingCeilingSet { userId, ceilingId, effectiveFromMonthKey, setAt }   # audit
 
@@ -81,6 +92,7 @@ open-finance.RevokeConsent
   -> ConsentRevoked { userId, consentId, revokedAt }
        -> open-finance.PurgeUserFinancialData    # transactions, accounts, bank tokens, pending authorisations
        -> bet-detection.ForgetUserClassifications # verdicts and the raw lines
+       -> gamification.ForgetMeasuredBadges      # streak, ceiling and reduction badges; savings stay
 ```
 
 **The projection is the load-bearing part of the statement.** `open-finance`

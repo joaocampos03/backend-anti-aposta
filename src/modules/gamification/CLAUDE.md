@@ -1,7 +1,7 @@
 # `gamification` — sustaining the change
 
-Self-Determination Theory, not points. Implements `docs/features/goals.md` (the Metas screen) plus
-the registration bootstrap of `Streak` and `BadgeCollection`.
+Self-Determination Theory, not points. Implements `docs/features/goals.md` (the Metas screen) and
+`docs/features/achievements.md` (the Conquistas screen).
 
 ## Two kinds of goal, kept apart on purpose
 
@@ -46,8 +46,36 @@ Never merge them into one figure, and never let savings copy borrow the certaint
   client computes nothing. It answers in counts and differences, never in advice.
 - `NO_CONSENT` / `SYNCING` return the user's own ceiling and no measured figure.
 
+## `StreakRecord` — derived, never stored
+
+- **Computed from the bet days on every read** (`OpenFinanceBetDayReader`: the first betting debit of
+  each São Paulo day, following the projected classification). A counter kept beside the
+  transactions it counts can disagree with them, and the person would believe the counter. The old
+  `gamification_streaks` table is gone.
+- The window is the charts' twelve months, ending today. **Today is never counted**; a stretch that
+  reaches the window's far edge is a lower bound (`startsBeforeWindow`), and a window with no bet
+  is `windowDayCount - 1` days, never zero. The bet that ended a stretch is the one on the day
+  *after* its newest day.
+
+## `BadgeCollection` — awarded once, never revoked
+
+- `BADGE_CATALOGUE` (domain) holds ids, families and thresholds; `BADGE_COPY` (messages) holds the
+  Portuguese. `BadgeAttainment` measures one figure per family — the longest streak counting the
+  one under way, the longest run of **adjacent** closed months `REACHED` or falling, the goals ever
+  reached — and `awardDue` awards what is due and not held. A falling figure takes nothing back.
+- `AchievementsEvaluation` + `BadgeAwarding` are shared by `DescribeAchievements` (the screen, which
+  awards on read because a streak badge can fall due only by a day passing) and `EvaluateBadges`
+  (after `TransactionsIngested`, `BetClassificationOverridden`, `SavingsGoalReached`). The
+  collection's `version` lets one of two racing evaluations write; the loser re-reads.
+- **One evaluation interrupts once**: `BadgesAwarded` is one event per evaluation, and
+  `announceAwardedBadges` words a single `BADGE_AWARDED` for the last badge awarded, counting the
+  rest.
+- `ConsentRevoked` → `ForgetMeasuredBadges`: the streak, ceiling and reduction badges are derived
+  from the shared statement (LGPD art. 18). Savings badges stay.
+
 ## Not done yet
 
-`Streak` extension/breaking and badge awarding are still bootstrap only. `SavingsGoalReached` and
-`BettingCeilingSet` have no subscribers; no notification is pushed for a reached goal because the
+`STREAK_BROKEN` is not emitted: a first synchronisation ingests twelve months at once, so "a bet
+ended a running streak" needs its own rule first. `BettingCeilingSet` has no subscriber (setting a
+ceiling cannot change a closed month). No notification is pushed for a reached goal because the
 person who reached it already sees `reachedNow` on their own request.
