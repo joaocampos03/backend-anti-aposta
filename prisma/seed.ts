@@ -430,6 +430,7 @@ async function withRunningApi<TResult>(work: (baseUrl: string) => Promise<TResul
         logger,
         frontendOrigin: env.FRONTEND_ORIGIN,
         trustProxy: 'loopback',
+        turnstileSecretKey: env.TURNSTILE_SECRET_KEY,
         settings: {
           consentPolicyVersion: env.REGISTRATION_CONSENT_POLICY_VERSION,
           timeZone: env.TIME_ZONE,

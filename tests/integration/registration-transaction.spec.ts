@@ -15,6 +15,7 @@ import { RecordingEventPublisher } from '@shared/testing/recording-event-publish
 import { SystemClock } from '@shared/infrastructure/system-clock.js';
 import { prisma } from '@shared/infrastructure/prisma.js';
 import { UuidV7IdGenerator } from '@shared/infrastructure/uuid-v7-id-generator.js';
+import { InMemoryHumanVerifier } from '@modules/identity/infrastructure/in-memory/in-memory-human-verifier.js';
 import { VALID_REGISTRATION } from './test-app.js';
 
 class SessionWriteFailure extends Error {}
@@ -59,6 +60,7 @@ describe('registration as one transaction', () => {
       new SystemClock(),
       new RecordingEventPublisher(),
       { consentPolicyVersion: '2026-10-01', sessionLifetimeInDays: 14 },
+      new InMemoryHumanVerifier(),
     );
 
     await expect(registerUser.execute({ ...VALID_REGISTRATION })).rejects.toThrow(

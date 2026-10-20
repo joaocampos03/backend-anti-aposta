@@ -14,6 +14,7 @@ const app = createApp(
     logger,
     frontendOrigin: env.FRONTEND_ORIGIN,
     trustProxy: env.TRUST_PROXY,
+    turnstileSecretKey: env.TURNSTILE_SECRET_KEY,
     settings: {
       consentPolicyVersion: env.REGISTRATION_CONSENT_POLICY_VERSION,
       timeZone: env.TIME_ZONE,

@@ -6,6 +6,7 @@ import { UserSignedIn } from '../domain/events/user-signed-in.js';
 import { SIGN_IN_FAILURE_THRESHOLD } from '../domain/sign-in-throttle.js';
 import { InMemoryIdentityUnitOfWork } from '../infrastructure/in-memory/in-memory-identity-unit-of-work.js';
 import { InMemoryPasswordHasher } from '../infrastructure/in-memory/in-memory-password-hasher.js';
+import { InMemoryHumanVerifier } from '../infrastructure/in-memory/in-memory-human-verifier.js';
 import { InMemoryPasswordResetTokenRepository } from '../infrastructure/in-memory/in-memory-password-reset-token.repository.js';
 import { InMemoryPasswordVerifier } from '../infrastructure/in-memory/in-memory-password-verifier.js';
 import { InMemorySessionRepository } from '../infrastructure/in-memory/in-memory-session.repository.js';
@@ -110,6 +111,7 @@ async function registerAna(): Promise<void> {
     clock,
     new RecordingEventPublisher(),
     { consentPolicyVersion: '2026-10-01', sessionLifetimeInDays: 14 },
+    new InMemoryHumanVerifier(),
   );
 
   const registered = await registerUser.execute(aRegistration().withPassword(PASSWORD).build());

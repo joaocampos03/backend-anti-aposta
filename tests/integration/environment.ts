@@ -22,4 +22,6 @@ export const INTEGRATION_ENVIRONMENT: Readonly<Record<string, string>> = {
   // Test-only values, meaningless outside this suite's throwaway database.
   OPEN_FINANCE_TOKEN_KEY: 'dGVzdC1vbmx5LWtleS10aGlydHktdHdvLWJ5dGVzISE=',
   OPEN_FINANCE_CLIENT_SECRET: 'integration-suite-client-secret',
+  // Cloudflare's always-passing test secret; the suite injects a fake verifier anyway.
+  TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA',
 };

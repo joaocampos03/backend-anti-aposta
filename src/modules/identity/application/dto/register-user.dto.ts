@@ -6,6 +6,8 @@ export interface RegisterUserInput {
   readonly password: string;
   readonly passwordConfirmation: string;
   readonly acceptedRegistrationConsent: boolean;
+  /** The Turnstile widget's single-use token from the register form. */
+  readonly humanVerificationToken: string;
 }
 
 export interface RegisteredUserOutput {

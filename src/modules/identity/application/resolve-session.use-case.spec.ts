@@ -6,6 +6,7 @@ import { InMemoryIdentityUnitOfWork } from '../infrastructure/in-memory/in-memor
 import { InMemoryPasswordResetTokenRepository } from '../infrastructure/in-memory/in-memory-password-reset-token.repository.js';
 import { InMemorySignInThrottleRepository } from '../infrastructure/in-memory/in-memory-sign-in-throttle.repository.js';
 import { InMemoryPasswordHasher } from '../infrastructure/in-memory/in-memory-password-hasher.js';
+import { InMemoryHumanVerifier } from '../infrastructure/in-memory/in-memory-human-verifier.js';
 import { InMemorySessionRepository } from '../infrastructure/in-memory/in-memory-session.repository.js';
 import { InMemorySessionTokenGenerator } from '../infrastructure/in-memory/in-memory-session-token-generator.js';
 import { InMemoryUserRepository } from '../infrastructure/in-memory/in-memory-user.repository.js';
@@ -56,6 +57,7 @@ beforeEach(() => {
     clock,
     new RecordingEventPublisher(),
     { consentPolicyVersion: '2026-10-01', sessionLifetimeInDays: 14 },
+    new InMemoryHumanVerifier(),
   );
 });
 

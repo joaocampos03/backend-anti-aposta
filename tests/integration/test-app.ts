@@ -8,6 +8,8 @@ import {
   type OpenFinanceSettings,
   type SandboxBankSettings,
 } from '@src/container.js';
+import type { HumanVerificationVerdict } from '@modules/identity/application/ports/human-verifier.port.js';
+import { InMemoryHumanVerifier } from '@modules/identity/infrastructure/in-memory/in-memory-human-verifier.js';
 import { logger } from '@shared/infrastructure/logger.js';
 import { prisma } from '@shared/infrastructure/prisma.js';
 import { INTEGRATION_ENVIRONMENT } from './environment.js';
@@ -70,6 +72,8 @@ export interface TestAppOptions {
   readonly ledgerWritesEnabled?: boolean;
   /** Where the sandbox bank posts its "resources changed" notices. */
   readonly noticeUri?: string;
+  /** What the registration challenge answers; Cloudflare is never called. */
+  readonly humanVerdict?: HumanVerificationVerdict;
 }
 
 /**
@@ -87,6 +91,8 @@ export function createTestApp(
       frontendOrigin: 'http://localhost:3000',
       // Supertest connects over loopback, exactly as the Next.js server does locally.
       trustProxy: options.trustProxy ?? 'loopback',
+      turnstileSecretKey: INTEGRATION_ENVIRONMENT['TURNSTILE_SECRET_KEY'] ?? '',
+      humanVerifier: new InMemoryHumanVerifier(options.humanVerdict),
       settings: { ...DEFAULT_SETTINGS, ...settings },
       openFinance: {
         ...TEST_OPEN_FINANCE,
@@ -168,4 +174,5 @@ export const VALID_REGISTRATION = {
   password: 'quatro palavras comuns',
   passwordConfirmation: 'quatro palavras comuns',
   acceptedRegistrationConsent: true,
+  humanVerificationToken: 'XXXX.DUMMY.TOKEN.XXXX',
 } as const;

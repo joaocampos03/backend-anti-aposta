@@ -11,6 +11,7 @@ export class RegistrationBuilder {
     password: 'quatro palavras comuns',
     passwordConfirmation: 'quatro palavras comuns',
     acceptedRegistrationConsent: true,
+    humanVerificationToken: 'XXXX.DUMMY.TOKEN.XXXX',
   };
 
   named(name: string): this {
@@ -33,6 +34,12 @@ export class RegistrationBuilder {
 
   withPasswordConfirmation(passwordConfirmation: string): this {
     this.input = { ...this.input, passwordConfirmation };
+
+    return this;
+  }
+
+  withHumanVerificationToken(humanVerificationToken: string): this {
+    this.input = { ...this.input, humanVerificationToken };
 
     return this;
   }

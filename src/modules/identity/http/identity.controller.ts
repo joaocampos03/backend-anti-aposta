@@ -47,6 +47,7 @@ export class IdentityController {
       password: body.password,
       passwordConfirmation: body.passwordConfirmation,
       acceptedRegistrationConsent: body.acceptedRegistrationConsent ?? false,
+      humanVerificationToken: body.humanVerificationToken,
     });
 
     if (!result.ok) {
