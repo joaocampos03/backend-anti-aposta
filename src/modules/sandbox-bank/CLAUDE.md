@@ -76,7 +76,8 @@ to the bank and **nowhere else**. The demonstration console's variant,
 in the path, so a presenter can type a movement and watch another screen update. Its account
 listing **opens nothing**: the bank cannot tell a real customer id from a typo.
 
-Both routes are **not mounted** when `NODE_ENV=production` or `SANDBOX_BANK_LEDGER_WRITES=disabled`.
+Both routes are **not mounted** when `SANDBOX_BANK_LEDGER_WRITES=disabled` (production included: the
+switch alone decides).
 A fabricated movement must never be able to reach a real person's statement.
 
 ### The notice to the DataRecipient

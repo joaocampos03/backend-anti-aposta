@@ -81,24 +81,24 @@ const environmentSchema = z.object({
   /** The bank's authorisation screen, rendered by the frontend. */
   SANDBOX_BANK_AUTHORISATION_URL: z.url().default('http://localhost:3000/sandbox/authorize'),
   /**
-   * Whether a person may book entries at the sandbox. Never in production,
-   * whatever this says: a fabricated movement must not be able to reach a real
-   * person's statement.
+   * Whether a person may book entries at the sandbox, and whether the
+   * demonstration console is mounted. Any signed-in person can then book on
+   * anyone's account by id, so set it to `disabled` wherever real people are.
    */
   SANDBOX_BANK_LEDGER_WRITES: z.enum(['enabled', 'disabled']).default('enabled'),
   SANDBOX_BANK_LEDGER_ENTRIES_PER_HOUR: z.coerce.number().int().positive().default(120),
   /**
    * The demonstration console's sends to a person by id. Mounted on the same
-   * switch as the sandbox's ledger writes, so never in production.
+   * switch as the sandbox's ledger writes.
    */
   DEMO_NOTIFICATIONS_PER_HOUR: z.coerce.number().int().positive().default(120),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;
 
-/** The one switch whose answer depends on two variables. */
+/** The sandbox's demo writes and the console that rides on them. */
 export function sandboxLedgerWritesEnabled(environment: Environment): boolean {
-  return environment.NODE_ENV !== 'production' && environment.SANDBOX_BANK_LEDGER_WRITES === 'enabled';
+  return environment.SANDBOX_BANK_LEDGER_WRITES === 'enabled';
 }
 
 function readEnvironment(): Environment {

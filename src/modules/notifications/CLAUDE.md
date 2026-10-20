@@ -61,7 +61,7 @@ pipes the body through.
 
 Sends one notification to one person by id, so a presenter can show each kind on another screen.
 Any signed-in caller may use it, which is why it is mounted **only** where the sandbox's demo
-writes are on (`sandboxLedgerWritesEnabled`: never in production), and rate limited
+writes are on (`sandboxLedgerWritesEnabled`, i.e. `SANDBOX_BANK_LEDGER_WRITES=enabled`), and rate limited
 (`DEMO_NOTIFICATIONS_PER_HOUR`).
 
 | Status | Code | When |

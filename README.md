@@ -68,7 +68,7 @@ so it lives outside `/api/v1`:
 | `GET`    | `/sandbox/open-finance/v2/authorize`              | session               | What the bank's authorisation screen shows |
 | `POST`   | `/sandbox/open-finance/v2/authorize`              | session               | The person's answer; returns the redirect with a code or `access_denied` |
 | `GET`    | `/sandbox/bank/accounts`                          | session               | The person's own accounts at the sandbox |
-| `POST`   | `/sandbox/bank/accounts/{id}/ledger-entries`      | session, throttled    | Book a movement at the bank (never mounted in production) |
+| `POST`   | `/sandbox/bank/accounts/{id}/ledger-entries`      | session, throttled    | Book a movement at the bank (only where `SANDBOX_BANK_LEDGER_WRITES` is on) |
 
 `open-finance` reaches the first five over HTTP through an anti-corruption layer, exactly as it
 would reach a real institution. A movement booked at the bank reaches the statement on the next
