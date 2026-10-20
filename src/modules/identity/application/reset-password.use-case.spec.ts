@@ -8,6 +8,7 @@ import { PasswordResetToken } from '../domain/password-reset-token.js';
 import { Session } from '../domain/session.js';
 import { InMemoryIdentityUnitOfWork } from '../infrastructure/in-memory/in-memory-identity-unit-of-work.js';
 import { InMemoryPasswordHasher } from '../infrastructure/in-memory/in-memory-password-hasher.js';
+import { InMemoryHumanVerifier } from '../infrastructure/in-memory/in-memory-human-verifier.js';
 import { InMemoryPasswordResetTokenRepository } from '../infrastructure/in-memory/in-memory-password-reset-token.repository.js';
 import { InMemoryPasswordVerifier } from '../infrastructure/in-memory/in-memory-password-verifier.js';
 import { InMemorySessionRepository } from '../infrastructure/in-memory/in-memory-session.repository.js';
@@ -83,6 +84,7 @@ beforeEach(async () => {
     clock,
     new RecordingEventPublisher(),
     { consentPolicyVersion: '2026-10-01', sessionLifetimeInDays: 14 },
+    new InMemoryHumanVerifier(),
   ).execute(aRegistration().withPassword(OLD_PASSWORD).build());
 
   if (!registered.ok) {

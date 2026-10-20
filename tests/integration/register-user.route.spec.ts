@@ -114,11 +114,44 @@ describe('POST /api/v1/identity/users', () => {
       email: VALID_REGISTRATION.email,
       password: VALID_REGISTRATION.password,
       passwordConfirmation: VALID_REGISTRATION.passwordConfirmation,
+      humanVerificationToken: VALID_REGISTRATION.humanVerificationToken,
     });
 
     expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('CONSENT_REQUIRED');
     expect(await prisma.user.count()).toBe(0);
+  });
+
+  it('refuses the registration when the challenge was not solved, and creates no user', async () => {
+    const response = await request(createTestApp({}, { humanVerdict: 'FAILED' }))
+      .post(REGISTER_PATH)
+      .send(VALID_REGISTRATION);
+
+    expect(response.status).toBe(422);
+    expect(response.body.error).toEqual({
+      code: 'HUMAN_VERIFICATION_FAILED',
+      message: 'Não conseguimos confirmar a verificação de segurança. Tente de novo.',
+      details: {},
+    });
+    expect(await prisma.user.count()).toBe(0);
+  });
+
+  it('registers anyway when the challenge provider cannot be reached', async () => {
+    const response = await request(createTestApp({}, { humanVerdict: 'UNREACHABLE' }))
+      .post(REGISTER_PATH)
+      .send(VALID_REGISTRATION);
+
+    expect(response.status).toBe(201);
+  });
+
+  it('refuses a body without the challenge token', async () => {
+    const { humanVerificationToken: _omitted, ...withoutToken } = VALID_REGISTRATION;
+
+    const response = await request(createTestApp()).post(REGISTER_PATH).send(withoutToken);
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+    expect(Object.keys(response.body.error.details)).toEqual(['humanVerificationToken']);
   });
 
   it('refuses a body that tries to set what the server computes', async () => {

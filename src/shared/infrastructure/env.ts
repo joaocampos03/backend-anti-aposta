@@ -1,6 +1,42 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+/** Cloudflare's always-passing test secret, paired with the test site key on the frontend. */
+const TURNSTILE_TEST_SECRET_KEY = '1x0000000000000000000000000000000AA';
+
+/** Cloudflare's test keys are a digit, `x`, then zeros; a real one is `0x4AAA…`. */
+const TURNSTILE_TEST_KEY_PATTERN = /^[1-3]x0{10,}/;
+
+/**
+ * Locally, in the suites and on previews, the test secret: anybody passes, which
+ * is the point while developing. In Vercel production a missing or test secret
+ * would leave registration unprotected without anybody noticing, so boot fails.
+ */
+function withTurnstileSecretKey<
+  TFields extends { readonly TURNSTILE_SECRET_KEY?: string | undefined; readonly VERCEL_ENV?: string | undefined },
+>(
+  fields: TFields,
+  context: z.RefinementCtx,
+): TFields & { TURNSTILE_SECRET_KEY: string } {
+  const secretKey = fields.TURNSTILE_SECRET_KEY;
+
+  if (fields.VERCEL_ENV !== 'production') {
+    return { ...fields, TURNSTILE_SECRET_KEY: secretKey ?? TURNSTILE_TEST_SECRET_KEY };
+  }
+
+  if (secretKey === undefined || TURNSTILE_TEST_KEY_PATTERN.test(secretKey)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['TURNSTILE_SECRET_KEY'],
+      message: 'production needs the real secret from the Turnstile dashboard, not a test key',
+    });
+
+    return z.NEVER;
+  }
+
+  return { ...fields, TURNSTILE_SECRET_KEY: secretKey };
+}
+
 /**
  * The only file in the repository allowed to read `process.env`. A missing
  * variable fails at startup, not at 2 a.m. inside a route handler.
@@ -38,7 +74,20 @@ const environmentSchema = z.object({
    * The per-IP window that catches credential spraying across many addresses.
    * The per-account window that matters lives in the domain, in `SignInThrottle`.
    */
-  SIGN_IN_ATTEMPTS_PER_QUARTER_HOUR: z.coerce.number().int().positive().default(50),
+  /**
+   * Cloudflare Turnstile's secret, checked on registration only. Optional outside
+   * Vercel production, where it falls back to Cloudflare's always-passing test
+   * secret; required there, and a test secret is refused. See
+   * `withTurnstileSecretKey` below.
+   */
+  TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
+  /**
+   * Set by Vercel itself (`production`, `preview`, `development`), never by
+   * hand. Absent locally and in the test suites. `NODE_ENV` cannot tell a
+   * deployment apart: it is `production` on every Vercel build, previews too.
+   */
+  VERCEL_ENV: z.string().optional(),
+  SIGN_IN_ATTEMPTS_PER_QUARTER_HOUR:z.coerce.number().int().positive().default(50),
   PASSWORD_RESET_ATTEMPTS_PER_HOUR: z.coerce.number().int().positive().default(10),
   /** So a script cannot rewrite a betting history through the override endpoint. */
   CLASSIFICATION_OVERRIDES_PER_HOUR: z.coerce.number().int().positive().default(30),
@@ -92,7 +141,7 @@ const environmentSchema = z.object({
    * switch as the sandbox's ledger writes.
    */
   DEMO_NOTIFICATIONS_PER_HOUR: z.coerce.number().int().positive().default(120),
-});
+}).transform(withTurnstileSecretKey);
 
 export type Environment = z.infer<typeof environmentSchema>;
 

@@ -9,6 +9,7 @@ import {
   SavingsGoalReached,
 } from '@modules/gamification/index.js';
 import { UserRegistered } from '@modules/identity/index.js';
+import type { HumanVerifier } from '@modules/identity/application/ports/human-verifier.port.js';
 import { RegisterUser } from '@modules/identity/application/register-user.use-case.js';
 import { ResetPassword } from '@modules/identity/application/reset-password.use-case.js';
 import { ResolveSession } from '@modules/identity/application/resolve-session.use-case.js';
@@ -22,6 +23,7 @@ import { PrismaPasswordResetTokenRepository } from '@modules/identity/infrastruc
 import { PrismaSessionRepository } from '@modules/identity/infrastructure/prisma-session.repository.js';
 import { PrismaSignInThrottleRepository } from '@modules/identity/infrastructure/prisma-sign-in-throttle.repository.js';
 import { PrismaUserRepository } from '@modules/identity/infrastructure/prisma-user.repository.js';
+import { TurnstileHumanVerifier } from '@modules/identity/infrastructure/turnstile-human-verifier.js';
 import { IdentityController } from '@modules/identity/http/identity.controller.js';
 import {
   registerUserBodySchema,
@@ -265,6 +267,10 @@ export interface ContainerInput {
   readonly settings: ContainerSettings;
   readonly openFinance: OpenFinanceSettings;
   readonly sandboxBank: SandboxBankSettings;
+  /** Cloudflare Turnstile's secret, for the registration challenge. */
+  readonly turnstileSecretKey: string;
+  /** Overridden in tests so no suite calls Cloudflare. */
+  readonly humanVerifier?: HumanVerifier;
   /** Overridden in tests so an issued session always lands on the same instant. */
   readonly clock?: Clock;
 }
@@ -301,6 +307,7 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       consentPolicyVersion: input.settings.consentPolicyVersion,
       sessionLifetimeInDays: input.settings.sessionLifetimeInDays,
     },
+    input.humanVerifier ?? new TurnstileHumanVerifier(input.turnstileSecretKey, input.logger),
   );
 
   const signIn = new SignIn({

@@ -1,4 +1,7 @@
-import { AppError, type AppErrorDetails } from '@shared/application/app-error.js';
+import {
+  AppError,
+  type AppErrorDetails,
+} from '@shared/application/app-error.js';
 import { assertNever } from '@shared/domain/assert-never.js';
 import { IDENTITY_MESSAGES } from './identity.messages.js';
 
@@ -12,22 +15,48 @@ import { IDENTITY_MESSAGES } from './identity.messages.js';
  */
 export const identityFailures = {
   emailAlreadyRegistered: (): AppError =>
-    new AppError('EMAIL_ALREADY_REGISTERED', IDENTITY_MESSAGES.emailAlreadyRegistered, 409, {
-      field: 'email',
-    }),
+    new AppError(
+      'EMAIL_ALREADY_REGISTERED',
+      IDENTITY_MESSAGES.emailAlreadyRegistered,
+      409,
+      {
+        field: 'email',
+      },
+    ),
 
   validationFailed: (details: AppErrorDetails): AppError =>
-    new AppError('VALIDATION_FAILED', IDENTITY_MESSAGES.validationFailed, 422, details),
+    new AppError(
+      'VALIDATION_FAILED',
+      IDENTITY_MESSAGES.validationFailed,
+      422,
+      details,
+    ),
 
   consentRequired: (): AppError =>
     new AppError('CONSENT_REQUIRED', IDENTITY_MESSAGES.consentRequired, 422, {
       field: 'acceptedRegistrationConsent',
     }),
 
+  /**
+   * Form-level, with no field: the challenge is not something the person typed,
+   * and the message says the check failed rather than that they look like a bot.
+   */
+  humanVerificationFailed: (): AppError =>
+    new AppError(
+      'HUMAN_VERIFICATION_FAILED',
+      IDENTITY_MESSAGES.humanVerificationFailed,
+      422,
+    ),
+
   passwordTooShort: (): AppError =>
-    new AppError('PASSWORD_TOO_SHORT', IDENTITY_MESSAGES.passwordTooShort, 422, {
-      field: 'password',
-    }),
+    new AppError(
+      'PASSWORD_TOO_SHORT',
+      IDENTITY_MESSAGES.passwordTooShort,
+      422,
+      {
+        field: 'password',
+      },
+    ),
 
   passwordConfirmationMismatch: (): AppError =>
     new AppError(
@@ -46,7 +75,11 @@ export const identityFailures = {
    * gambling.
    */
   invalidCredentials: (): AppError =>
-    new AppError('INVALID_CREDENTIALS', IDENTITY_MESSAGES.invalidCredentials, 401),
+    new AppError(
+      'INVALID_CREDENTIALS',
+      IDENTITY_MESSAGES.invalidCredentials,
+      401,
+    ),
 
   /**
    * A delay, never a lockout: after the window the correct password works. The
@@ -54,9 +87,14 @@ export const identityFailures = {
    * enumeration signal and a scolding at once.
    */
   tooManyAttempts: (retryAfterSeconds: number): AppError =>
-    new AppError('TOO_MANY_ATTEMPTS', IDENTITY_MESSAGES.tooManySignInAttempts, 429, {
-      retryAfterSeconds,
-    }),
+    new AppError(
+      'TOO_MANY_ATTEMPTS',
+      IDENTITY_MESSAGES.tooManySignInAttempts,
+      429,
+      {
+        retryAfterSeconds,
+      },
+    ),
 
   /**
    * One message for unknown, expired, already-used and superseded tokens.
@@ -64,7 +102,11 @@ export const identityFailures = {
    * guesses existed.
    */
   passwordResetTokenInvalid: (): AppError =>
-    new AppError('RESET_TOKEN_INVALID', IDENTITY_MESSAGES.passwordResetTokenInvalid, 422),
+    new AppError(
+      'RESET_TOKEN_INVALID',
+      IDENTITY_MESSAGES.passwordResetTokenInvalid,
+      422,
+    ),
 
   /** A 401 is never rendered as an error: the person did nothing wrong. */
   sessionInvalid: (): AppError =>
@@ -79,12 +121,16 @@ export const identityFailures = {
  * password the register form would have accepted. Length is the only gate;
  * strength stays advice.
  */
-export function passwordFailure(code: 'PASSWORD_TOO_SHORT' | 'PASSWORD_TOO_LONG'): AppError {
+export function passwordFailure(
+  code: 'PASSWORD_TOO_SHORT' | 'PASSWORD_TOO_LONG',
+): AppError {
   switch (code) {
     case 'PASSWORD_TOO_SHORT':
       return identityFailures.passwordTooShort();
     case 'PASSWORD_TOO_LONG':
-      return identityFailures.validationFailed({ password: IDENTITY_MESSAGES.passwordTooLong });
+      return identityFailures.validationFailed({
+        password: IDENTITY_MESSAGES.passwordTooLong,
+      });
     default:
       return assertNever(code);
   }

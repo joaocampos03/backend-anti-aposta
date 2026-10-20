@@ -22,6 +22,7 @@ import type {
   IdentityTransaction,
   IdentityUnitOfWork,
 } from './ports/identity-unit-of-work.port.js';
+import type { HumanVerifier } from './ports/human-verifier.port.js';
 import type { PasswordHasher } from './ports/password-hasher.port.js';
 import type { SessionTokenGenerator } from './ports/session-token-generator.port.js';
 
@@ -64,11 +65,19 @@ export class RegisterUser implements UseCase<RegisterUserInput, RegisteredUserOu
     private readonly clock: Clock,
     private readonly events: EventPublisher,
     private readonly policy: RegistrationPolicy,
+    private readonly humanVerifier: HumanVerifier,
   ) {}
 
   async execute(input: RegisterUserInput): Promise<Result<RegisteredUserOutput, AppError>> {
-    // The consent is the first gate: without it the platform has no
-    // authorisation to process the name and the e-mail at all.
+    // Before the consent, because it processes neither the name nor the e-mail —
+    // only the token — and a script should learn none of the rules below
+    // without solving the challenge first.
+    if ((await this.humanVerifier.verify(input.humanVerificationToken)) === 'FAILED') {
+      return fail(identityFailures.humanVerificationFailed());
+    }
+
+    // The consent is the first gate on personal data: without it the platform
+    // has no authorisation to process the name and the e-mail at all.
     if (!input.acceptedRegistrationConsent) {
       return fail(identityFailures.consentRequired());
     }

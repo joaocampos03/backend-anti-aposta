@@ -7,6 +7,7 @@ import { InMemoryIdentityUnitOfWork } from '../infrastructure/in-memory/in-memor
 import { InMemoryPasswordResetTokenRepository } from '../infrastructure/in-memory/in-memory-password-reset-token.repository.js';
 import { InMemorySignInThrottleRepository } from '../infrastructure/in-memory/in-memory-sign-in-throttle.repository.js';
 import { InMemoryPasswordHasher } from '../infrastructure/in-memory/in-memory-password-hasher.js';
+import { InMemoryHumanVerifier } from '../infrastructure/in-memory/in-memory-human-verifier.js';
 import { InMemorySessionRepository } from '../infrastructure/in-memory/in-memory-session.repository.js';
 import { InMemorySessionTokenGenerator } from '../infrastructure/in-memory/in-memory-session-token-generator.js';
 import { InMemoryUserRepository } from '../infrastructure/in-memory/in-memory-user.repository.js';
@@ -25,7 +26,11 @@ beforeEach(() => {
   users = new InMemoryUserRepository();
   sessions = new InMemorySessionRepository();
   events = new RecordingEventPublisher();
-  registerUser = new RegisterUser(
+  registerUser = registerUserCheckedBy(new InMemoryHumanVerifier());
+});
+
+function registerUserCheckedBy(humanVerifier: InMemoryHumanVerifier): RegisterUser {
+  return new RegisterUser(
     new InMemoryIdentityUnitOfWork(
       users,
       sessions,
@@ -38,8 +43,9 @@ beforeEach(() => {
     new FixedClock(REGISTERED_AT),
     events,
     { consentPolicyVersion: POLICY_VERSION, sessionLifetimeInDays: 14 },
+    humanVerifier,
   );
-});
+}
 
 describe('RegisterUser', () => {
   it('creates the account and issues a session', async () => {
@@ -92,6 +98,41 @@ describe('RegisterUser', () => {
       userId: '0192f3c1-7a1b-7c3e-9f20-000000000001',
       registeredAt: '2026-10-03T13:04:11.182Z',
     });
+  });
+
+  it('refuses the registration when the challenge was not solved, and creates no user', async () => {
+    const result = await registerUserCheckedBy(new InMemoryHumanVerifier('FAILED')).execute(
+      aRegistration().build(),
+    );
+
+    expect(!result.ok && result.error.code).toBe('HUMAN_VERIFICATION_FAILED');
+    expect(users.users).toHaveLength(0);
+  });
+
+  it('checks the challenge before the consent, so a script learns no rule without solving it', async () => {
+    const result = await registerUserCheckedBy(new InMemoryHumanVerifier('FAILED')).execute(
+      aRegistration().withoutConsent().build(),
+    );
+
+    expect(!result.ok && result.error.code).toBe('HUMAN_VERIFICATION_FAILED');
+  });
+
+  it('registers anyway when the challenge provider cannot be reached', async () => {
+    const result = await registerUserCheckedBy(new InMemoryHumanVerifier('UNREACHABLE')).execute(
+      aRegistration().build(),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('hands the verifier the token the form sent', async () => {
+    const humanVerifier = new InMemoryHumanVerifier();
+
+    await registerUserCheckedBy(humanVerifier).execute(
+      aRegistration().withHumanVerificationToken('token-do-widget').build(),
+    );
+
+    expect(humanVerifier.verifiedTokens).toEqual(['token-do-widget']);
   });
 
   it('refuses the registration when the consent was not given, and creates no user', async () => {

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { IDENTITY_FIELD_MESSAGES, IDENTITY_MESSAGES } from '../application/identity.messages.js';
 
+/** Turnstile's documented ceiling; anything longer is not a token. */
+const HUMAN_VERIFICATION_TOKEN_MAXIMUM_LENGTH = 2048;
+
 /**
  * Shape only. The rules — a name of 2 to 80 characters, a valid address, a
  * password of at least 8 — belong to the domain, which is what gives a short
@@ -21,6 +24,11 @@ export const registerUserBodySchema = z.strictObject(
     acceptedRegistrationConsent: z
       .boolean({ error: IDENTITY_MESSAGES.consentRequired })
       .optional(),
+    humanVerificationToken: z
+      .string({ error: IDENTITY_MESSAGES.humanVerificationFailed })
+      .max(HUMAN_VERIFICATION_TOKEN_MAXIMUM_LENGTH, {
+        error: IDENTITY_MESSAGES.humanVerificationFailed,
+      }),
   },
   { error: IDENTITY_FIELD_MESSAGES.unexpected },
 );

@@ -89,10 +89,28 @@ Next.js server's address, nothing more. Both directions are covered in
 *existing* credential locks out whoever set a shorter password before the policy existed.
 `Password.attempt` exists for exactly this, next to `Password.create` which does gate.
 
+## The registration challenge
+
+`POST /identity/users` requires `humanVerificationToken`, the single-use token of the Cloudflare
+Turnstile widget on `/register`. **Registration only**: sign-in already has `SignInThrottle` and
+the per-IP net, and a challenge on the door somebody uses every day costs the people this product
+serves more than it costs a script.
+
+- `RegisterUser` checks it **first**, before the consent. It processes no personal data — only the
+  token travels to Cloudflare, never the name, the e-mail or the caller's address — and a script
+  should learn none of the rules below without solving it.
+- **An outage lets people through.** `HumanVerifier` answers `PASSED`, `FAILED` or
+  `UNREACHABLE`, and only `FAILED` refuses. Cloudflare being down must not close registration;
+  the per-IP limits still hold while it is.
+- `HUMAN_VERIFICATION_FAILED` is form-level, with an empty `details`, and its message says the
+  check failed — never that the person looks like a robot.
+- Tests never call Cloudflare: `InMemoryHumanVerifier` answers a fixed verdict, and the
+  integration app takes it through `ContainerInput.humanVerifier`.
+
 ## Error codes this module owns
 
 `EMAIL_ALREADY_REGISTERED` (409) · `VALIDATION_FAILED` (422) · `CONSENT_REQUIRED` (422) ·
-`PASSWORD_TOO_SHORT` (422) · `PASSWORD_CONFIRMATION_MISMATCH` (422) · `RESET_TOKEN_INVALID` (422) ·
+`PASSWORD_TOO_SHORT` (422) · `PASSWORD_CONFIRMATION_MISMATCH` (422) · `HUMAN_VERIFICATION_FAILED` (422) · `RESET_TOKEN_INVALID` (422) ·
 `INVALID_CREDENTIALS` (401) · `SESSION_INVALID` (401) · `SESSION_EXPIRED` (401) ·
 `TOO_MANY_ATTEMPTS` (429).
 
@@ -108,8 +126,8 @@ Two rules about them:
   message. Telling "expirou" from "já foi usado" tells a token guesser which of their guesses
   existed.
 
-Order of checks in `RegisterUser`: consent → name and e-mail → password length → confirmation →
-uniqueness. Consent comes first because without it the platform has no authorisation to process the
+Order of checks in `RegisterUser`: challenge → consent → name and e-mail → password length → confirmation →
+uniqueness. Consent comes first among the rules on personal data because without it the platform has no authorisation to process the
 name and the e-mail at all.
 
 ## Where the copy lives
