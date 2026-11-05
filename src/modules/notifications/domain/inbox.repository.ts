@@ -4,4 +4,5 @@ import type { Inbox } from './inbox.js';
 export interface InboxRepository {
   save(inbox: Inbox): Promise<void>;
   findByUserId(userId: UniqueEntityId): Promise<Inbox | null>;
+  deleteByUserId(userId: UniqueEntityId): Promise<void>;
 }

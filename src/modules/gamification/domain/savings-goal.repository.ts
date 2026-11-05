@@ -9,4 +9,6 @@ export interface SavingsGoalRepository {
   save(goal: SavingsGoal): Promise<void>;
   /** Somebody else's goal is `null`, exactly like one that does not exist. */
   findByIdAndUserId(goalId: UniqueEntityId, userId: UniqueEntityId): Promise<SavingsGoal | null>;
+  /** The movements cascade from these rows. */
+  deleteAllForUser(userId: UniqueEntityId): Promise<void>;
 }

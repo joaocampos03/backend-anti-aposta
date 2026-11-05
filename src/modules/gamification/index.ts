@@ -4,6 +4,7 @@ export type { BadgeAnnouncement } from './application/badge-announcement.js';
 export { CreateBadgeCollection } from './application/create-badge-collection.use-case.js';
 export type { CreateBadgeCollectionInput } from './application/create-badge-collection.use-case.js';
 export { EvaluateBadges } from './application/evaluate-badges.use-case.js';
+export { ForgetGamificationAccount } from './application/forget-gamification-account.use-case.js';
 export { ForgetMeasuredBadges } from './application/forget-measured-badges.use-case.js';
 export { BadgesAwarded } from './domain/events/badges-awarded.js';
 export type { BadgesAwardedPayload } from './domain/events/badges-awarded.js';

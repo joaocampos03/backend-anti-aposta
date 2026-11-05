@@ -3,7 +3,7 @@ import type { BadgeCollection } from '../../domain/badge-collection.js';
 import type { BadgeCollectionRepository } from '../../domain/badge-collection.repository.js';
 
 export class InMemoryBadgeCollectionRepository implements BadgeCollectionRepository {
-  readonly collections: BadgeCollection[] = [];
+  collections: BadgeCollection[] = [];
 
   async save(collection: BadgeCollection): Promise<void> {
     const index = this.collections.findIndex((stored) =>
@@ -19,7 +19,15 @@ export class InMemoryBadgeCollectionRepository implements BadgeCollectionReposit
     this.collections.push(collection);
   }
 
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    this.collections = this.collections.filter(
+      (stored) => !stored.userId.equals(userId),
+    );
+  }
+
   async findByUserId(userId: UniqueEntityId): Promise<BadgeCollection | null> {
-    return this.collections.find((stored) => stored.userId.equals(userId)) ?? null;
+    return (
+      this.collections.find((stored) => stored.userId.equals(userId)) ?? null
+    );
   }
 }

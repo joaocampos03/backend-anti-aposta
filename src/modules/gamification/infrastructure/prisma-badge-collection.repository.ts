@@ -36,6 +36,10 @@ export class PrismaBadgeCollectionRepository implements BadgeCollectionRepositor
     }
   }
 
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    await this.client.badgeCollection.deleteMany({ where: { userId: userId.value } });
+  }
+
   async findByUserId(userId: UniqueEntityId): Promise<BadgeCollection | null> {
     const row = await this.client.badgeCollection.findUnique({
       where: { userId: userId.value },

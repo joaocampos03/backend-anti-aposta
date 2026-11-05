@@ -36,6 +36,10 @@ export class PrismaSavingsGoalRepository implements SavingsGoalRepository {
     }
   }
 
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    await this.client.savingsGoal.deleteMany({ where: { userId: userId.value } });
+  }
+
   async findByIdAndUserId(goalId: UniqueEntityId, userId: UniqueEntityId): Promise<SavingsGoal | null> {
     const row = await this.client.savingsGoal.findFirst({
       where: { id: goalId.value, userId: userId.value },

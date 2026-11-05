@@ -3,7 +3,7 @@ import type { Inbox } from '../../domain/inbox.js';
 import type { InboxRepository } from '../../domain/inbox.repository.js';
 
 export class InMemoryInboxRepository implements InboxRepository {
-  readonly inboxes: Inbox[] = [];
+  inboxes: Inbox[] = [];
 
   async save(inbox: Inbox): Promise<void> {
     const index = this.inboxes.findIndex((stored) => stored.userId.equals(inbox.userId));
@@ -15,6 +15,10 @@ export class InMemoryInboxRepository implements InboxRepository {
     }
 
     this.inboxes.push(inbox);
+  }
+
+  async deleteByUserId(userId: UniqueEntityId): Promise<void> {
+    this.inboxes = this.inboxes.filter((stored) => !stored.userId.equals(userId));
   }
 
   async findByUserId(userId: UniqueEntityId): Promise<Inbox | null> {

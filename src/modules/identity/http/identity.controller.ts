@@ -1,12 +1,27 @@
 import type { RequestHandler } from 'express';
 import { readBearerToken } from '@shared/http/bearer-token.js';
+import { callerOf } from '@shared/http/require-session.js';
 import type { ValidatedBody } from '@shared/http/validate.js';
+import type { ChangeDisplayName } from '../application/change-display-name.use-case.js';
+import type { ChangeEmail } from '../application/change-email.use-case.js';
+import type { ChangePassword } from '../application/change-password.use-case.js';
+import type { DeleteAccount } from '../application/delete-account.use-case.js';
+import type { DescribeAccount } from '../application/describe-account.use-case.js';
+import type { EndOtherSessions } from '../application/end-other-sessions.use-case.js';
 import type { RegisterUser } from '../application/register-user.use-case.js';
 import type { ResetPassword } from '../application/reset-password.use-case.js';
 import type { ResolveSession } from '../application/resolve-session.use-case.js';
 import type { SignIn } from '../application/sign-in.use-case.js';
 import type { SignOut } from '../application/sign-out.use-case.js';
-import type { RegisterUserBody, ResetPasswordBody, SignInBody } from './identity.schemas.js';
+import type {
+  ChangeDisplayNameBody,
+  ChangeEmailBody,
+  ChangePasswordBody,
+  DeleteAccountBody,
+  RegisterUserBody,
+  ResetPasswordBody,
+  SignInBody,
+} from './identity.schemas.js';
 import { IdentityPresenter } from './identity.presenter.js';
 
 const OK = 200;
@@ -19,12 +34,22 @@ export interface IdentityUseCases {
   readonly signOut: SignOut;
   readonly resolveSession: ResolveSession;
   readonly resetPassword: ResetPassword;
+  readonly describeAccount: DescribeAccount;
+  readonly changeDisplayName: ChangeDisplayName;
+  readonly changeEmail: ChangeEmail;
+  readonly changePassword: ChangePassword;
+  readonly endOtherSessions: EndOtherSessions;
+  readonly deleteAccount: DeleteAccount;
 }
 
 export interface IdentityRequestBodies {
   readonly registerUser: ValidatedBody<RegisterUserBody>;
   readonly signIn: ValidatedBody<SignInBody>;
   readonly resetPassword: ValidatedBody<ResetPasswordBody>;
+  readonly changeDisplayName: ValidatedBody<ChangeDisplayNameBody>;
+  readonly changeEmail: ValidatedBody<ChangeEmailBody>;
+  readonly changePassword: ValidatedBody<ChangePasswordBody>;
+  readonly deleteAccount: ValidatedBody<DeleteAccountBody>;
 }
 
 /**
@@ -125,5 +150,93 @@ export class IdentityController {
     }
 
     response.status(OK).json(IdentityPresenter.passwordChanged(result.value));
+  };
+
+  readonly account: RequestHandler = async (_request, response, next) => {
+    const result = await this.useCases.describeAccount.execute({ userId: callerOf(response) });
+
+    if (!result.ok) {
+      next(result.error);
+
+      return;
+    }
+
+    response.status(OK).json(IdentityPresenter.account(result.value));
+  };
+
+  readonly changeDisplayName: RequestHandler = async (request, response, next) => {
+    const result = await this.useCases.changeDisplayName.execute({
+      userId: callerOf(response),
+      name: this.bodies.changeDisplayName.read(request).name,
+    });
+
+    if (!result.ok) {
+      next(result.error);
+
+      return;
+    }
+
+    response.status(NO_CONTENT).end();
+  };
+
+  readonly changeEmail: RequestHandler = async (request, response, next) => {
+    const result = await this.useCases.changeEmail.execute({
+      userId: callerOf(response),
+      ...this.bodies.changeEmail.read(request),
+    });
+
+    if (!result.ok) {
+      next(result.error);
+
+      return;
+    }
+
+    response.status(NO_CONTENT).end();
+  };
+
+  readonly changePassword: RequestHandler = async (request, response, next) => {
+    const result = await this.useCases.changePassword.execute({
+      userId: callerOf(response),
+      token: readBearerToken(request.headers.authorization),
+      ...this.bodies.changePassword.read(request),
+    });
+
+    if (!result.ok) {
+      next(result.error);
+
+      return;
+    }
+
+    response.status(NO_CONTENT).end();
+  };
+
+  readonly endOtherSessions: RequestHandler = async (request, response, next) => {
+    const result = await this.useCases.endOtherSessions.execute({
+      userId: callerOf(response),
+      token: readBearerToken(request.headers.authorization),
+    });
+
+    if (!result.ok) {
+      next(result.error);
+
+      return;
+    }
+
+    response.status(NO_CONTENT).end();
+  };
+
+  readonly deleteAccount: RequestHandler = async (request, response, next) => {
+    const result = await this.useCases.deleteAccount.execute({
+      userId: callerOf(response),
+      currentPassword: this.bodies.deleteAccount.read(request).currentPassword,
+    });
+
+    if (!result.ok) {
+      next(result.error);
+
+      return;
+    }
+
+    response.status(NO_CONTENT).end();
   };
 }

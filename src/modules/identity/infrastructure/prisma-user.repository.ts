@@ -48,4 +48,9 @@ export class PrismaUserRepository implements UserRepository {
 
     return found !== null;
   }
+
+  /** `deleteMany`, so a retry after this row went is not an error. */
+  async delete(id: UniqueEntityId): Promise<void> {
+    await this.client.user.deleteMany({ where: { id: id.value } });
+  }
 }

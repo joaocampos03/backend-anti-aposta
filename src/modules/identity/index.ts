@@ -9,5 +9,7 @@ export { UserSignedIn } from './domain/events/user-signed-in.js';
 export type { UserSignedInPayload } from './domain/events/user-signed-in.js';
 export { UserSignedOut } from './domain/events/user-signed-out.js';
 export type { UserSignedOutPayload } from './domain/events/user-signed-out.js';
+export { AccountDeleted } from './domain/events/account-deleted.js';
+export type { AccountDeletedPayload } from './domain/events/account-deleted.js';
 export { PasswordChanged } from './domain/events/password-changed.js';
 export type { PasswordChangedPayload } from './domain/events/password-changed.js';

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
 import { DisplayName } from './display-name.js';
 import { Email } from './email.js';
+import { AccountDeleted } from './events/account-deleted.js';
 import { UserRegistered } from './events/user-registered.js';
 import { PasswordHash } from './password-hash.js';
 import { RegistrationConsent } from './registration-consent.js';
@@ -73,5 +74,21 @@ describe('User', () => {
     });
 
     expect(restored.pullEvents()).toHaveLength(0);
+  });
+});
+
+describe('deleting an account', () => {
+  const DELETED_AT = new Date('2026-11-05T12:00:00.000Z');
+
+  it('records that it happened, and keeps the address out of the event', () => {
+    const user = aUser();
+    user.pullEvents();
+
+    user.recordDeletion(DELETED_AT);
+
+    const [event] = user.pullEvents();
+
+    expect(event).toBeInstanceOf(AccountDeleted);
+    expect(JSON.stringify(event)).not.toContain('ana@exemplo.com');
   });
 });

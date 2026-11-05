@@ -11,6 +11,10 @@ export class PrismaNotificationRepository implements NotificationRepository {
     await this.client.notification.create({ data: NotificationMapper.toRow(notification) });
   }
 
+  async deleteAllForRecipient(recipientId: UniqueEntityId): Promise<void> {
+    await this.client.notification.deleteMany({ where: { recipientId: recipientId.value } });
+  }
+
   /** The row at the edge of what is kept is the cut-off; with fewer than that, nothing goes. */
   async retainNewest(recipientId: UniqueEntityId, capacity: number): Promise<void> {
     const oldestKept = await this.client.notification.findFirst({

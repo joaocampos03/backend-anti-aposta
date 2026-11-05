@@ -65,3 +65,37 @@ export const resetPasswordBodySchema = z.strictObject(
 );
 
 export type ResetPasswordBody = z.infer<typeof resetPasswordBodySchema>;
+
+const currentPassword = z.string({ error: IDENTITY_FIELD_MESSAGES.passwordMissing });
+
+export const changeDisplayNameBodySchema = z.strictObject(
+  { name: z.string({ error: IDENTITY_FIELD_MESSAGES.name }) },
+  { error: IDENTITY_FIELD_MESSAGES.unexpected },
+);
+
+export type ChangeDisplayNameBody = z.infer<typeof changeDisplayNameBodySchema>;
+
+export const changeEmailBodySchema = z.strictObject(
+  { email: z.string({ error: IDENTITY_FIELD_MESSAGES.email }), currentPassword },
+  { error: IDENTITY_FIELD_MESSAGES.unexpected },
+);
+
+export type ChangeEmailBody = z.infer<typeof changeEmailBodySchema>;
+
+export const changePasswordBodySchema = z.strictObject(
+  {
+    currentPassword,
+    password: z.string({ error: IDENTITY_FIELD_MESSAGES.password }),
+    passwordConfirmation: z.string({ error: IDENTITY_MESSAGES.passwordConfirmationMismatch }),
+  },
+  { error: IDENTITY_FIELD_MESSAGES.unexpected },
+);
+
+export type ChangePasswordBody = z.infer<typeof changePasswordBodySchema>;
+
+export const deleteAccountBodySchema = z.strictObject(
+  { currentPassword },
+  { error: IDENTITY_FIELD_MESSAGES.unexpected },
+);
+
+export type DeleteAccountBody = z.infer<typeof deleteAccountBodySchema>;

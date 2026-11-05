@@ -26,6 +26,13 @@ export const IDENTITY_MESSAGES = {
   currentSessionUnavailable:
     'Não conseguimos carregar sua conta agora. Tente novamente em instantes.',
   sessionNotValid: 'Sua sessão não é mais válida. Entre novamente.',
+  currentPasswordInvalid: 'Senha atual incorreta.',
+  accountUnavailable: 'Não conseguimos carregar sua conta agora. Tente novamente em instantes.',
+  accountChangeUnavailable:
+    'Não conseguimos salvar essa alteração agora. Tente novamente em instantes.',
+  accountDeletionUnavailable: 'Não conseguimos excluir sua conta agora. Tente novamente em instantes.',
+  accountDeletionIncomplete:
+    'Não conseguimos concluir a exclusão. Sua conta continua ativa: tente de novo em instantes.',
 } as const;
 
 /** Anchored under the field that failed, in a card 22rem wide. */

@@ -18,6 +18,17 @@ import { SignOut } from '@modules/identity/application/sign-out.use-case.js';
 import { Argon2PasswordHasher } from '@modules/identity/infrastructure/argon2-password-hasher.js';
 import { CryptoSessionTokenGenerator } from '@modules/identity/infrastructure/crypto-session-token-generator.js';
 import { OpenFinanceAuthorisedConsentLookup } from '@modules/identity/infrastructure/open-finance-authorised-consent-lookup.js';
+import { ChangeDisplayName } from '@modules/identity/application/change-display-name.use-case.js';
+import { ChangeEmail } from '@modules/identity/application/change-email.use-case.js';
+import { ChangePassword } from '@modules/identity/application/change-password.use-case.js';
+import { CurrentPasswordCheck } from '@modules/identity/application/current-password-check.js';
+import { DescribeAccount } from '@modules/identity/application/describe-account.use-case.js';
+import { EndOtherSessions } from '@modules/identity/application/end-other-sessions.use-case.js';
+import { DeleteAccount } from '@modules/identity/application/delete-account.use-case.js';
+import { ModularAccountErasure } from '@modules/identity/infrastructure/modular-account-erasure.js';
+import { ForgetGamificationAccount } from '@modules/gamification/application/forget-gamification-account.use-case.js';
+import { ForgetNotifications } from '@modules/notifications/application/forget-notifications.use-case.js';
+import { EraseOpenFinanceAccount } from '@modules/open-finance/application/erase-open-finance-account.use-case.js';
 import { PrismaIdentityUnitOfWork } from '@modules/identity/infrastructure/prisma-identity-unit-of-work.js';
 import { PrismaPasswordResetTokenRepository } from '@modules/identity/infrastructure/prisma-password-reset-token.repository.js';
 import { PrismaSessionRepository } from '@modules/identity/infrastructure/prisma-session.repository.js';
@@ -28,6 +39,10 @@ import { IdentityController } from '@modules/identity/http/identity.controller.j
 import {
   registerUserBodySchema,
   resetPasswordBodySchema,
+  changeDisplayNameBodySchema,
+  changeEmailBodySchema,
+  changePasswordBodySchema,
+  deleteAccountBodySchema,
   signInBodySchema,
 } from '@modules/identity/http/identity.schemas.js';
 import { identityFailures } from '@modules/identity/application/identity.failures.js';
@@ -597,7 +612,28 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     registerUser: validateBody(registerUserBodySchema, identityFailures.validationFailed),
     signIn: validateBody(signInBodySchema, identityFailures.validationFailed),
     resetPassword: validateBody(resetPasswordBodySchema, identityFailures.validationFailed),
+    changeDisplayName: validateBody(changeDisplayNameBodySchema, identityFailures.validationFailed),
+    changeEmail: validateBody(changeEmailBodySchema, identityFailures.validationFailed),
+    changePassword: validateBody(changePasswordBodySchema, identityFailures.validationFailed),
+    deleteAccount: validateBody(deleteAccountBodySchema, identityFailures.validationFailed),
   };
+
+  const currentPassword = new CurrentPasswordCheck({
+    signInThrottles: new PrismaSignInThrottleRepository(input.prisma),
+    passwordVerifier: passwords,
+    clock,
+  });
+  const accountErasure = new ModularAccountErasure({
+    forgetClassifications: new ForgetUserClassifications(classifications),
+    forgetGamification: new ForgetGamificationAccount(
+      new PrismaBadgeCollectionRepository(input.prisma),
+      new PrismaSavingsGoalRepository(input.prisma),
+      new PrismaBettingCeilingRepository(input.prisma),
+    ),
+    forgetNotifications: new ForgetNotifications(inboxes, notificationRecords),
+    eraseOpenFinance: new EraseOpenFinanceAccount(consents, dataHolder),
+    logger: input.logger,
+  });
 
   return {
     logger: input.logger,
@@ -612,12 +648,37 @@ export function buildContainer(input: ContainerInput): AppDependencies {
     },
     identity: {
       controller: new IdentityController(
-        { registerUser, signIn, signOut, resolveSession, resetPassword },
+        {
+          registerUser,
+          signIn,
+          signOut,
+          resolveSession,
+          resetPassword,
+          describeAccount: new DescribeAccount(users, sessions, clock),
+          changeDisplayName: new ChangeDisplayName(users),
+          changeEmail: new ChangeEmail(users, currentPassword),
+          changePassword: new ChangePassword({
+            unitOfWork,
+            users,
+            currentPassword,
+            passwordHasher: passwords,
+            sessionTokens,
+            clock,
+            events: eventBus,
+          }),
+          endOtherSessions: new EndOtherSessions(sessions, sessionTokens, clock, eventBus),
+          deleteAccount: new DeleteAccount(users, currentPassword, accountErasure, clock, eventBus),
+        },
         bodies,
       ),
       validateRegisterUserBody: bodies.registerUser.middleware,
       validateSignInBody: bodies.signIn.middleware,
       validateResetPasswordBody: bodies.resetPassword.middleware,
+      validateChangeDisplayNameBody: bodies.changeDisplayName.middleware,
+      validateChangeEmailBody: bodies.changeEmail.middleware,
+      validateChangePasswordBody: bodies.changePassword.middleware,
+      validateDeleteAccountBody: bodies.deleteAccount.middleware,
+      requireSession: sessionGuard,
       registrationRateLimits: [
         windowedRateLimit({
           code: 'TOO_MANY_REQUESTS',

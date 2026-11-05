@@ -68,8 +68,7 @@ export const identityFailures = {
 
   /**
    * The only credential-related failure sign-in has. It answers for a wrong
-   * password, an unknown address, a deleted account and an account pending
-   * purge, with the same status, the same message and an empty `details` — so
+   * password, an unknown address and a deleted account, with the same status, the same message and an empty `details` — so
    * the message cannot be anchored to one field and thereby reveal which half
    * was wrong. The list being protected here is a list of people who may be
    * gambling.
@@ -107,6 +106,20 @@ export const identityFailures = {
       IDENTITY_MESSAGES.passwordResetTokenInvalid,
       422,
     ),
+
+  /**
+   * A 422 and not a 401: the session is fine, and the frontend signs out on a 401.
+   * Anchored to the field, unlike sign-in: whoever is here already knows the
+   * address, so naming the wrong half gives nothing away.
+   */
+  currentPasswordInvalid: (): AppError =>
+    new AppError('CURRENT_PASSWORD_INVALID', IDENTITY_MESSAGES.currentPasswordInvalid, 422, {
+      field: 'currentPassword',
+    }),
+
+  /** The account still exists, so asking again picks up where this stopped. */
+  accountDeletionIncomplete: (): AppError =>
+    new AppError('ACCOUNT_DELETION_INCOMPLETE', IDENTITY_MESSAGES.accountDeletionIncomplete, 500),
 
   /** A 401 is never rendered as an error: the person did nothing wrong. */
   sessionInvalid: (): AppError =>

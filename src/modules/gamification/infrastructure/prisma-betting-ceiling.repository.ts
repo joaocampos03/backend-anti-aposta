@@ -35,6 +35,10 @@ export class PrismaBettingCeilingRepository implements BettingCeilingRepository 
     }
   }
 
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    await this.client.bettingCeiling.deleteMany({ where: { userId: userId.value } });
+  }
+
   async findByUserId(userId: UniqueEntityId): Promise<BettingCeiling | null> {
     const row = await this.client.bettingCeiling.findUnique({
       where: { userId: userId.value },

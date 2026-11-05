@@ -3,6 +3,7 @@ import type { Notification } from './notification.js';
 
 export interface NotificationRepository {
   save(notification: Notification): Promise<void>;
+  deleteAllForRecipient(recipientId: UniqueEntityId): Promise<void>;
   /** Drops everything older than this person's newest `capacity`. */
   retainNewest(recipientId: UniqueEntityId, capacity: number): Promise<void>;
   /** This person's newest, newest first. */

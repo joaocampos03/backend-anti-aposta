@@ -4,7 +4,7 @@ import type { BettingCeilingRepository } from '../../domain/betting-ceiling.repo
 import { ConcurrentModificationError } from '../../domain/gamification.errors.js';
 
 export class InMemoryBettingCeilingRepository implements BettingCeilingRepository {
-  readonly ceilings: BettingCeiling[] = [];
+  ceilings: BettingCeiling[] = [];
   /** Makes the next save lose the race, as a second request would make it. */
   conflictOnNextSave = false;
 
@@ -18,6 +18,10 @@ export class InMemoryBettingCeilingRepository implements BettingCeilingRepositor
     if (!this.ceilings.some((stored) => stored.equals(ceiling))) {
       this.ceilings.push(ceiling);
     }
+  }
+
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    this.ceilings = this.ceilings.filter((stored) => !stored.userId.equals(userId));
   }
 
   async findByUserId(userId: UniqueEntityId): Promise<BettingCeiling | null> {

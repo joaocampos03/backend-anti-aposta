@@ -57,8 +57,8 @@ records the moment), sign-in issues one through `Session.issueOnSignIn`, which r
 Three rules, all from the ethics section rather than from convenience. They are tested as behaviour,
 not assumed:
 
-1. **One undifferentiated failure.** A wrong password, an unknown address, a deleted account and one
-   pending purge all leave `SignIn` by the same return, with `INVALID_CREDENTIALS`, the same message
+1. **One undifferentiated failure.** A wrong password, an unknown address and a deleted account all
+   leave `SignIn` by the same return, with `INVALID_CREDENTIALS`, the same message
    and an **empty `details`** — so the message cannot be anchored to a field and thereby reveal
    which half was wrong. `Credential.verify` answers a boolean and never a reason, because a caller
    holding the reason is one refactor away from leaking it.
@@ -107,16 +107,62 @@ serves more than it costs a script.
 - Tests never call Cloudflare: `InMemoryHumanVerifier` answers a fixed verdict, and the
   integration app takes it through `ContainerInput.humanVerifier`.
 
+## The account screen
+
+`/settings` runs on these, all behind the session and all scoped to the caller:
+
+| Method | Path | Request | Response | Errors |
+| --- | --- | --- | --- | --- |
+| `GET` | `/identity/users/current` | — | `200 { user, registrationConsent, activeSessionCount }` | `401` |
+| `PUT` | `/identity/users/current/display-name` | `{ name }` | `204` | `401`, `422` |
+| `PUT` | `/identity/users/current/email` | `{ email, currentPassword }` | `204` | `401`, `409`, `422`, `429` |
+| `PUT` | `/identity/users/current/password` | `{ currentPassword, password, passwordConfirmation }` | `204` | `401`, `422`, `429` |
+| `DELETE` | `/identity/sessions/others` | — | `204` | `401` |
+| `POST` | `/identity/users/current/deletion` | `{ currentPassword }` | `204` | `401`, `422`, `429`, `500` |
+
+- **The password is asked again before anything a stolen session must not do**: the address, the
+  password, the deletion. `CurrentPasswordCheck` shares the sign-in throttle, so a stolen session is
+  not an unthrottled way to guess. A wrong one is `CURRENT_PASSWORD_INVALID` (422, anchored to the
+  field): it is not a `401`, because the session is fine.
+- **The password check comes before the address check**, so `EMAIL_ALREADY_REGISTERED` only reaches
+  whoever holds the credential.
+- **The new address is not verified**, because no mail provider exists. Password recovery is what
+  will need that once one lands.
+- **Changing the password keeps the session that did it** and ends the others. A reset link ends them
+  all: that caller proved nothing but access to a mailbox.
+
+## Deleting an account
+
+Two decisions, both the product owner's: **it is immediate**, with no grace period, and **the address
+is free to register again**, so nothing about the person is retained.
+
+`DeleteAccount` confirms the password, erases every context, then deletes the user row, which takes
+the sessions and reset tokens with it and frees the address. From then on a sign-in answers exactly
+like an unknown address.
+
+**Erasure is a direct call, not an event, and this is deliberate.** The bus logs a failing subscriber
+and carries on, and the account may only go once every context has confirmed. So `AccountErasure`
+asks each context in turn and the row goes **last**. If one could not finish, the account still
+exists, the person is told so (`ACCOUNT_DELETION_INCOMPLETE`, 500), and asking again picks up where it
+stopped: every step is idempotent.
+
+`sandbox-bank` is not erased: it is a foreign institution and its ledger is its own. Open Finance
+tells it the consent is over, best effort, and an unreachable bank never blocks the erasure.
+
+**A new context that stores something by user id must join `ModularAccountErasure`** in the same pull
+request, or an account deletion leaves that data behind.
+
 ## Error codes this module owns
 
 `EMAIL_ALREADY_REGISTERED` (409) · `VALIDATION_FAILED` (422) · `CONSENT_REQUIRED` (422) ·
 `PASSWORD_TOO_SHORT` (422) · `PASSWORD_CONFIRMATION_MISMATCH` (422) · `HUMAN_VERIFICATION_FAILED` (422) · `RESET_TOKEN_INVALID` (422) ·
-`INVALID_CREDENTIALS` (401) · `SESSION_INVALID` (401) · `SESSION_EXPIRED` (401) ·
-`TOO_MANY_ATTEMPTS` (429).
+`CURRENT_PASSWORD_INVALID` (422) · `INVALID_CREDENTIALS` (401) · `SESSION_INVALID` (401) ·
+`SESSION_EXPIRED` (401) · `TOO_MANY_ATTEMPTS` (429) · `ACCOUNT_DELETION_INCOMPLETE` (500).
 
 Two rules about them:
 
-- The explicit `409` is **scoped to registration**. Sign-in and password recovery must keep
+- The explicit `409` is **scoped to registration and to changing the address**, where the caller has
+  just proved who they are. Sign-in and password recovery must keep
   undifferentiated answers: a different message for an unknown address there turns those forms into
   a way to enumerate people who may be gambling.
 - An unknown token and a revoked token answer the same `SESSION_INVALID`, which says nothing about
@@ -165,6 +211,7 @@ A reset must never refuse a password registration would have accepted, which is 
 | `UserSignedIn` | `{ userId, sessionId, signedInAt }` | nobody; audit |
 | `UserSignedOut` | `{ userId, sessionId, signedOutAt }` | nobody; audit |
 | `PasswordChanged` | `{ userId, changedAt }` | nobody; the revocation happens in the same transaction |
+| `AccountDeleted` | `{ userId, deletedAt }` | nobody; audit |
 
 No payload carries an address, a name, a password, a session token or a reset token. **No
 notification is ever sent for a sign-in**: a "novo acesso à sua conta" push is a banking pattern
@@ -179,8 +226,3 @@ repository and `env.ts` has no SMTP variables. Until it lands, nothing mints a `
 outside a test, and the reset endpoint has no way to be reached by a real person. Building it needs
 a `PasswordResetMailer` port, an adapter, the link base URL in `env`, a per-address throttle (3 per
 hour) and an identical `202` for every address, existing or not.
-
-**E-mail change and account deletion**, which belong to `/settings`. Two questions are still open
-and block that work, not these endpoints: whether the e-mail is editable (it decides whether `Email`
-is immutable on the aggregate) and whether a purged account's address is free to re-register (it
-decides whether the unique index covers live rows or all rows ever).

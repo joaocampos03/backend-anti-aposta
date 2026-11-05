@@ -42,7 +42,15 @@ function removeWhere<TItem>(items: TItem[], matches: (item: TItem) => boolean): 
 }
 
 export class InMemoryConsentRepository implements ConsentRepository {
-  readonly consents: Consent[] = [];
+  consents: Consent[] = [];
+
+  async findAllByUserId(userId: UniqueEntityId): Promise<readonly Consent[]> {
+    return this.consents.filter((consent) => consent.userId.equals(userId));
+  }
+
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    this.consents = this.consents.filter((consent) => !consent.userId.equals(userId));
+  }
 
   async save(consent: Consent): Promise<void> {
     upsert(this.consents, consent);

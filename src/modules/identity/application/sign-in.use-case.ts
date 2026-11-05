@@ -50,9 +50,8 @@ type AttemptErrorCode = Extract<
  * Three rules shape this use case, all of them from the ethics section rather
  * than from convenience:
  *
- * - **One undifferentiated failure.** A wrong password, an unknown address, a
- *   deleted account and one pending purge all leave by the same return, so no
- *   branch exists that could ever diverge into a clearer message.
+ * - **One undifferentiated failure.** A wrong password, an unknown address and a
+ *   deleted account all leave by the same return, so no branch exists that could ever diverge into a clearer message.
  * - **Constant time with respect to account existence.** An address with no
  *   account still spends a hash against a decoy, so timing cannot be used to
  *   enumerate users.

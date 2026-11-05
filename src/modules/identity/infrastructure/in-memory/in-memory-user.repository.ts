@@ -5,7 +5,7 @@ import type { UserRepository } from '../../domain/user.repository.js';
 
 /** The fake this module ships for unit tests. No database, no mocking framework. */
 export class InMemoryUserRepository implements UserRepository {
-  readonly users: User[] = [];
+  users: User[] = [];
 
   async save(user: User): Promise<void> {
     const index = this.users.findIndex((stored) => stored.id.equals(user.id));
@@ -29,5 +29,9 @@ export class InMemoryUserRepository implements UserRepository {
 
   async existsWithEmail(email: Email): Promise<boolean> {
     return this.users.some((stored) => stored.email.equals(email));
+  }
+
+  async delete(id: UniqueEntityId): Promise<void> {
+    this.users = this.users.filter((stored) => !stored.id.equals(id));
   }
 }

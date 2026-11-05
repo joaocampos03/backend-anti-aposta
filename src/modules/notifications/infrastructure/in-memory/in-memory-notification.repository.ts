@@ -9,6 +9,12 @@ export class InMemoryNotificationRepository implements NotificationRepository {
     this.notifications.push(notification);
   }
 
+  async deleteAllForRecipient(recipientId: UniqueEntityId): Promise<void> {
+    this.notifications = this.notifications.filter(
+      (notification) => !notification.recipientId.equals(recipientId),
+    );
+  }
+
   async retainNewest(recipientId: UniqueEntityId, capacity: number): Promise<void> {
     const kept = new Set(this.newestOf(recipientId).slice(0, capacity));
 
