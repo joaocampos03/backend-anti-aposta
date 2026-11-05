@@ -68,7 +68,7 @@ describe('Notification', () => {
   });
 
   it('refuses to announce zero new transactions', () => {
-    const composed = compose({ kind: 'TRANSACTIONS_INGESTED', ingestedCount: 0 });
+    const composed = compose({ kind: 'TRANSACTIONS_INGESTED', ingestedCount: 0, transactionIds: [] });
 
     expect(composed.ok).toBe(false);
   });

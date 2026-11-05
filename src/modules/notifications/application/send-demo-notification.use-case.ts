@@ -29,6 +29,10 @@ export class SendDemoNotification implements UseCase<SendDemoNotificationInput, 
   }
 
   private complete(draft: DemoNotificationDraft): NotificationContent {
+    if (draft.kind === 'TRANSACTIONS_INGESTED') {
+      return { ...draft, transactionIds: [] };
+    }
+
     if (draft.kind !== 'AWARENESS_NUDGE') {
       return draft;
     }

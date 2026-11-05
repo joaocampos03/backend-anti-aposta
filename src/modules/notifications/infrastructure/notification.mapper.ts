@@ -31,7 +31,12 @@ const storedContentSchema = z.discriminatedUnion('kind', [
     label: z.string(),
     amountInCents: z.number().int(),
   }),
-  z.object({ kind: z.literal('TRANSACTIONS_INGESTED'), ingestedCount: z.number().int() }),
+  // Rows from before the list quoted movements have no ids, and keep their count.
+  z.object({
+    kind: z.literal('TRANSACTIONS_INGESTED'),
+    ingestedCount: z.number().int(),
+    transactionIds: z.array(z.string()).default([]),
+  }),
 ]);
 
 export class NotificationMapper {
@@ -40,6 +45,7 @@ export class NotificationMapper {
       recipientId: UniqueEntityId.restore(row.recipientId),
       content: contentOf(row),
       createdAt: row.createdAt,
+      readAt: row.readAt,
     });
   }
 
@@ -50,6 +56,7 @@ export class NotificationMapper {
       kind: notification.content.kind,
       content: { ...notification.content },
       createdAt: notification.createdAt,
+      readAt: notification.readAt,
     };
   }
 }

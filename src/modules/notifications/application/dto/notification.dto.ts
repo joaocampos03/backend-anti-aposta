@@ -1,14 +1,20 @@
 import type {
   AwarenessNudgeContent,
   NotificationContent,
+  TransactionsIngestedContent,
 } from '../../domain/notification-content.js';
+import type { MovementLine } from '../ports/movement-reader.port.js';
 
 export interface NotificationDto {
   /** Also the stream's event id: a reconnecting browser resumes after it. */
   readonly id: string;
   readonly recipientId: string;
   readonly createdAt: string;
+  /** Null until the person has seen it in their list. */
+  readonly readAt: string | null;
   readonly content: NotificationContent;
+  /** Filled by the list alone: the stream carries a count, never a movement. */
+  readonly movements: readonly MovementLine[];
 }
 
 /**
@@ -17,7 +23,8 @@ export interface NotificationDto {
  */
 export type DemoNotificationDraft =
   | Omit<AwarenessNudgeContent, 'yieldInCents' | 'annualRatePercent'>
-  | Exclude<NotificationContent, AwarenessNudgeContent>;
+  | Omit<TransactionsIngestedContent, 'transactionIds'>
+  | Exclude<NotificationContent, AwarenessNudgeContent | TransactionsIngestedContent>;
 
 export interface SendDemoNotificationInput {
   readonly recipientId: string;
@@ -26,7 +33,16 @@ export interface SendDemoNotificationInput {
 
 export interface AnnounceIngestedTransactionsInput {
   readonly userId: string;
-  readonly ingestedCount: number;
+  readonly transactionIds: readonly string[];
+}
+
+export interface ListNotificationsInput {
+  readonly userId: string;
+}
+
+export interface MarkNotificationsReadInput {
+  readonly userId: string;
+  readonly notificationIds: readonly string[];
 }
 
 export interface ReplayNotificationsInput {

@@ -59,6 +59,9 @@ open-finance.CompleteAuthorisation / SynchroniseConsent / SynchroniseNotifiedCon
   -> TransactionsIngested { userId, transactionIds, ingestedAt }
        -> notifications.AnnounceIngestedTransactions   # TRANSACTIONS_INGESTED { ingestedCount } on the stream
 
+notifications.AnnounceIngestedTransactions / ListNotifications read, never write, across one boundary:
+  open-finance.PrismaMovementLineQuery (a row's amount, name, verdict)  via OpenFinanceMovementReader
+
 bet-detection.ClassifyTransaction
   -> BetTransactionDetected { userId, transactionId, matchedBy, confidence }
        -> open-finance.ProjectClassification     # refresh the copy on the row

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FixedClock } from '@shared/testing/fixed-clock.js';
 import { SequentialIdGenerator } from '@shared/testing/sequential-id-generator.js';
 import { InMemoryInboxRepository } from '../infrastructure/in-memory/in-memory-inbox.repository.js';
+import { InMemoryMovementReader } from '../infrastructure/in-memory/in-memory-movement-reader.js';
 import { InMemoryNotificationRepository } from '../infrastructure/in-memory/in-memory-notification.repository.js';
 import { InProcessNotificationStream } from '../infrastructure/in-process-notification-stream.js';
 import { AnnounceIngestedTransactions } from './announce-ingested-transactions.use-case.js';
@@ -44,14 +45,20 @@ beforeEach(async () => {
     idGenerator,
     clock,
   });
+  const movements = new InMemoryMovementReader();
   sendDemo = new SendDemoNotification(delivery, DOUBLING_YIELDS);
-  announce = new AnnounceIngestedTransactions(delivery);
+  announce = new AnnounceIngestedTransactions(delivery, movements);
   replay = new ReplayNotifications(notifications);
 
   const createInbox = new CreateInbox(inboxes, idGenerator, clock);
   await createInbox.execute({ userId: ANA });
   await createInbox.execute({ userId: BRUNO });
 });
+
+/** Ids the reader does not know: these tests are about the count, not the lines. */
+function transactionIdsOf(count: number): readonly string[] {
+  return Array.from({ length: count }, (_, index) => `transaction-${index}`);
+}
 
 function listen(userId: string): NotificationDto[] {
   const received: NotificationDto[] = [];
@@ -125,13 +132,13 @@ describe('announcing ingested transactions', () => {
   it('tells the person how many arrived', async () => {
     const ana = listen(ANA);
 
-    await announce.execute({ userId: ANA, ingestedCount: 3 });
+    await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(3) });
 
-    expect(ana[0]?.content).toEqual({ kind: 'TRANSACTIONS_INGESTED', ingestedCount: 3 });
+    expect(ana[0]?.content).toEqual({ kind: 'TRANSACTIONS_INGESTED', ingestedCount: 3, transactionIds: [] });
   });
 
   it('announces nothing when nothing arrived', async () => {
-    const announced = await announce.execute({ userId: ANA, ingestedCount: 0 });
+    const announced = await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(0) });
 
     expect(announced.ok && announced.value).toBeNull();
     expect(notifications.notifications).toHaveLength(0);
@@ -140,21 +147,21 @@ describe('announcing ingested transactions', () => {
 
 describe('replaying after a reconnection', () => {
   it('hands back only what came after the last id the browser saw, oldest first', async () => {
-    const first = await announce.execute({ userId: ANA, ingestedCount: 1 });
-    await announce.execute({ userId: ANA, ingestedCount: 2 });
-    await announce.execute({ userId: ANA, ingestedCount: 3 });
+    const first = await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(1) });
+    await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(2) });
+    await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(3) });
     const lastSeenId = first.ok ? (first.value?.id ?? null) : null;
 
     const replayed = await replay.execute({ userId: ANA, lastSeenId });
 
     expect(replayed.ok && replayed.value.map((notification) => notification.content)).toEqual([
-      { kind: 'TRANSACTIONS_INGESTED', ingestedCount: 2 },
-      { kind: 'TRANSACTIONS_INGESTED', ingestedCount: 3 },
+      { kind: 'TRANSACTIONS_INGESTED', ingestedCount: 2, transactionIds: [] },
+      { kind: 'TRANSACTIONS_INGESTED', ingestedCount: 3, transactionIds: [] },
     ]);
   });
 
   it('replays nothing on a fresh connection, so dismissed nudges stay dismissed', async () => {
-    await announce.execute({ userId: ANA, ingestedCount: 1 });
+    await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(1) });
 
     const replayed = await replay.execute({ userId: ANA, lastSeenId: null });
 
@@ -162,8 +169,8 @@ describe('replaying after a reconnection', () => {
   });
 
   it('never replays somebody else’s notifications', async () => {
-    const own = await announce.execute({ userId: ANA, ingestedCount: 1 });
-    await announce.execute({ userId: BRUNO, ingestedCount: 5 });
+    const own = await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(1) });
+    await announce.execute({ userId: BRUNO, transactionIds: transactionIdsOf(5) });
     const lastSeenId = own.ok ? (own.value?.id ?? null) : null;
 
     const replayed = await replay.execute({ userId: ANA, lastSeenId });
@@ -178,10 +185,10 @@ describe('replaying after a reconnection', () => {
   });
 
   it('caps a backlog, which is an inbox to read rather than modals to open', async () => {
-    const first = await announce.execute({ userId: ANA, ingestedCount: 1 });
+    const first = await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(1) });
 
     for (let index = 0; index < REPLAY_LIMIT + 5; index += 1) {
-      await announce.execute({ userId: ANA, ingestedCount: 1 });
+      await announce.execute({ userId: ANA, transactionIds: transactionIdsOf(1) });
     }
 
     const replayed = await replay.execute({

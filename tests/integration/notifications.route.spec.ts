@@ -133,7 +133,7 @@ function sendDemo(recipientId: string, body: Record<string, unknown>, bearer = a
 }
 
 /** The consent flow, as the browser walks it, so the bank has somebody to notify. */
-async function connect(caller: { token: string }): Promise<void> {
+async function connect(caller: { token: string }): Promise<string> {
   const requested = await asCaller(api().post('/api/v1/consents'), caller.token);
   const query = Object.fromEntries(
     new URL(requested.body.authorisationUrl as string).searchParams.entries(),
@@ -159,6 +159,8 @@ async function connect(caller: { token: string }): Promise<void> {
   ).send({ state: redirect.searchParams.get('state'), code: redirect.searchParams.get('code') });
 
   expect(completed.status).toBe(200);
+
+  return requested.body.consent.id as string;
 }
 
 describe('GET /api/v1/notifications/stream', () => {
@@ -340,5 +342,192 @@ describe('POST /api/v1/data-holder-notices', () => {
     });
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe('GET /api/v1/notifications', () => {
+  const streakBroken = { kind: 'STREAK_BROKEN', previousDays: 4 };
+
+  it('refuses a caller without a session', async () => {
+    const response = await api().get('/api/v1/notifications');
+
+    expect(response.status).toBe(401);
+  });
+
+  it('lists the caller’s own, newest first, in the stream’s shape and unread', async () => {
+    const older = await sendDemo(ana.userId, streakBroken);
+    const newer = await sendDemo(ana.userId, { ...streakBroken, previousDays: 9 });
+    await sendDemo(bruno.userId, streakBroken);
+
+    const response = await asCaller(api().get('/api/v1/notifications'), ana.token);
+
+    expect(response.status).toBe(200);
+    expect(response.body.nextCursor).toBeNull();
+    expect(response.body.items).toHaveLength(2);
+    expect(response.body.items[0]).toMatchObject({
+      id: newer.body.id,
+      kind: 'STREAK_BROKEN',
+      previousDays: 9,
+      readAt: null,
+    });
+    expect(response.body.items[1].id).toBe(older.body.id);
+  });
+
+  it('keeps the newest 50 in the database, not only in the answer', async () => {
+    const oldest = await sendDemo(ana.userId, streakBroken);
+
+    for (let index = 0; index < 50; index += 1) {
+      await sendDemo(ana.userId, streakBroken);
+    }
+
+    const response = await asCaller(api().get('/api/v1/notifications'), ana.token);
+    const ids = (response.body.items as { id: string }[]).map((item) => item.id);
+
+    expect(ids).toHaveLength(50);
+    expect(ids).not.toContain(oldest.body.id);
+    expect(await prisma.notification.count({ where: { recipientId: ana.userId } })).toBe(50);
+  });
+});
+
+describe('POST /api/v1/notifications/read-receipts', () => {
+  const path = '/api/v1/notifications/read-receipts';
+  const streakBroken = { kind: 'STREAK_BROKEN', previousDays: 4 };
+
+  async function readAtOf(id: string): Promise<Date | null | undefined> {
+    const row = await prisma.notification.findUnique({ where: { id } });
+
+    return row?.readAt;
+  }
+
+  it('refuses a caller without a session', async () => {
+    const response = await api().post(path).send({ notificationIds: [] });
+
+    expect(response.status).toBe(401);
+  });
+
+  it('marks the named ones as read and leaves the others', async () => {
+    const seen = await sendDemo(ana.userId, streakBroken);
+    const later = await sendDemo(ana.userId, streakBroken);
+
+    const response = await asCaller(api().post(path), ana.token).send({
+      notificationIds: [seen.body.id],
+    });
+
+    expect(response.status).toBe(204);
+    expect(await readAtOf(seen.body.id as string)).toBeInstanceOf(Date);
+    expect(await readAtOf(later.body.id as string)).toBeNull();
+  });
+
+  it('keeps the first reading when the same receipt arrives twice', async () => {
+    const seen = await sendDemo(ana.userId, streakBroken);
+    const receipt = { notificationIds: [seen.body.id] };
+
+    await asCaller(api().post(path), ana.token).send(receipt);
+    const first = await readAtOf(seen.body.id as string);
+    const repeated = await asCaller(api().post(path), ana.token).send(receipt);
+
+    expect(repeated.status).toBe(204);
+    expect(await readAtOf(seen.body.id as string)).toEqual(first);
+  });
+
+  it('touches nothing of somebody else’s, without confirming it exists', async () => {
+    const theirs = await sendDemo(bruno.userId, streakBroken);
+
+    const response = await asCaller(api().post(path), ana.token).send({
+      notificationIds: [theirs.body.id],
+    });
+
+    expect(response.status).toBe(204);
+    expect(await readAtOf(theirs.body.id as string)).toBeNull();
+  });
+
+  it('refuses an empty receipt and an id that is not one', async () => {
+    const empty = await asCaller(api().post(path), ana.token).send({ notificationIds: [] });
+    const malformed = await asCaller(api().post(path), ana.token).send({
+      notificationIds: ['not-an-id'],
+    });
+
+    expect(empty.status).toBe(422);
+    expect(malformed.status).toBe(422);
+  });
+});
+
+describe('the movements behind an announcement', () => {
+  interface ListedMovement {
+    readonly transactionId: string;
+    readonly counterparty: string;
+    readonly amountInCents: number;
+    readonly bet: { readonly matchedBy: string; readonly confidence: string } | null;
+  }
+
+  async function bookABet(): Promise<void> {
+    const accounts = await asCaller(
+      api().get(`/sandbox/bank/customers/${ana.userId}/accounts`),
+      bruno.token,
+    );
+    const checking = (accounts.body.items as { id: string; type: string }[]).find(
+      (account) => account.type === 'CONTA_DEPOSITO_A_VISTA',
+    );
+
+    await asCaller(
+      api().post(
+        `/sandbox/bank/customers/${ana.userId}/accounts/${checking?.id ?? ''}/ledger-entries`,
+      ),
+      bruno.token,
+    ).send({
+      amountInCents: -5000,
+      transactionName: 'PIX ENVIADO Aposta Andorinha',
+      type: 'PIX',
+      payeeDocument: '11222333000181',
+    });
+  }
+
+  async function announcedMovements(bearer: string): Promise<readonly ListedMovement[]> {
+    const listed = await asCaller(api().get('/api/v1/notifications'), bearer);
+    const items = listed.body.items as { kind: string; movements?: ListedMovement[] }[];
+
+    return items.find((item) => item.kind === 'TRANSACTIONS_INGESTED')?.movements ?? [];
+  }
+
+  it('says what arrived in the list, and only the count on the stream', async () => {
+    await connect(ana);
+    const anaStream = await openStream(ana.token);
+
+    await bookABet();
+    const [frame] = await anaStream.waitFor(1);
+    const [movement] = await announcedMovements(ana.token);
+
+    expect(frame?.data['movements']).toEqual([]);
+    expect(frame?.data['transactionIds']).toBeUndefined();
+    // The keyword agreed with the CNPJ, and a verdict reports its weakest policy.
+    expect(movement).toMatchObject({ amountInCents: -5000, bet: { confidence: 'LOW' } });
+    expect(movement?.counterparty).toContain('Andorinha');
+  });
+
+  it('shows a correction the next time the list is read', async () => {
+    await connect(ana);
+    await bookABet();
+    const [movement] = await announcedMovements(ana.token);
+
+    const corrected = await asCaller(
+      api().post(`/api/v1/transactions/${movement?.transactionId ?? ''}/classification-override`),
+      ana.token,
+    ).send({ verdict: 'NOT_A_BET' });
+    const [afterwards] = await announcedMovements(ana.token);
+
+    expect(corrected.status).toBeLessThan(300);
+    expect(afterwards?.bet).toBeNull();
+  });
+
+  it('leaves nothing financial in the inbox once the consent is revoked', async () => {
+    const consentId = await connect(ana);
+    await bookABet();
+
+    const revoked = await asCaller(api().post(`/api/v1/consents/${consentId}/revocation`), ana.token);
+    const listed = await asCaller(api().get('/api/v1/notifications'), ana.token);
+
+    expect(revoked.status).toBeLessThan(300);
+    expect(JSON.stringify(listed.body)).not.toContain('Andorinha');
+    expect(await announcedMovements(ana.token)).toEqual([]);
   });
 });

@@ -8,10 +8,14 @@ import { NotificationsError } from './notifications.errors.js';
 /** Long enough for a badge's evidence line, short enough for a lock screen. */
 export const MAXIMUM_TEXT_LENGTH = 140;
 
+/** How many a person keeps: the newest ones, and an older one makes room for a new one. */
+export const INBOX_CAPACITY = 50;
+
 interface NotificationProperties {
   readonly recipientId: UniqueEntityId;
   readonly content: NotificationContent;
   readonly createdAt: Date;
+  readonly readAt: Date | null;
 }
 
 /**
@@ -43,6 +47,7 @@ export class Notification extends AggregateRoot {
         recipientId: input.recipientId,
         content: input.content,
         createdAt: input.createdAt,
+        readAt: null,
       }),
     );
   }
@@ -61,6 +66,10 @@ export class Notification extends AggregateRoot {
 
   get createdAt(): Date {
     return this.properties.createdAt;
+  }
+
+  get readAt(): Date | null {
+    return this.properties.readAt;
   }
 }
 
