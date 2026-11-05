@@ -10,4 +10,6 @@ export interface UserRepository {
   findById(id: UniqueEntityId): Promise<User | null>;
   findByEmail(email: Email): Promise<User | null>;
   existsWithEmail(email: Email): Promise<boolean>;
+  /** Sessions and reset tokens go with it. What frees the address for a new account. */
+  delete(id: UniqueEntityId): Promise<void>;
 }

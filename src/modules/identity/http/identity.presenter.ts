@@ -1,3 +1,4 @@
+import type { AccountOutput } from '../application/dto/account.dto.js';
 import type { CurrentSessionOutput } from '../application/dto/current-session.dto.js';
 import type { PasswordChangedOutput } from '../application/dto/reset-password.dto.js';
 import type { SignedInOutput } from '../application/dto/sign-in.dto.js';
@@ -45,6 +46,23 @@ export class IdentityPresenter {
         expiresAt: output.session.expiresAt,
       },
       openFinance: { hasAuthorisedConsent: output.openFinance.hasAuthorisedConsent },
+    };
+  }
+
+  static account(output: AccountOutput): unknown {
+    return {
+      user: {
+        id: output.user.id,
+        name: output.user.name,
+        email: output.user.email,
+        registeredAt: output.user.registeredAt,
+      },
+      registrationConsent: {
+        acceptedAt: output.registrationConsent.acceptedAt,
+        policyVersion: output.registrationConsent.policyVersion,
+        scope: output.registrationConsent.scope,
+      },
+      activeSessionCount: output.activeSessionCount,
     };
   }
 

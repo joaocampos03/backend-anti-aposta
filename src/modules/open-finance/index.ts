@@ -8,6 +8,7 @@
  */
 export type { AuthorisedConsentPresence } from './application/authorised-consent-presence.js';
 export { AuthorisedConsentQuery } from './infrastructure/authorised-consent.query.js';
+export { EraseOpenFinanceAccount } from './application/erase-open-finance-account.use-case.js';
 export { IngestTransactions } from './application/ingest-transactions.use-case.js';
 export type {
   IngestedTransaction,

@@ -3,6 +3,7 @@ import type { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
 import { Credential } from './credential.js';
 import type { DisplayName } from './display-name.js';
 import type { Email } from './email.js';
+import { AccountDeleted } from './events/account-deleted.js';
 import { PasswordChanged } from './events/password-changed.js';
 import { UserRegistered } from './events/user-registered.js';
 import type { PasswordHash } from './password-hash.js';
@@ -83,5 +84,18 @@ export class User extends AggregateRoot {
   changePassword(passwordHash: PasswordHash, changedAt: Date): void {
     this.properties = { ...this.properties, passwordHash };
     this.addEvent(new PasswordChanged({ userId: this.id, changedAt }));
+  }
+
+  rename(displayName: DisplayName): void {
+    this.properties = { ...this.properties, displayName };
+  }
+
+  changeEmail(email: Email): void {
+    this.properties = { ...this.properties, email };
+  }
+
+  /** The erasing is the use case's: this only records that it happened. */
+  recordDeletion(deletedAt: Date): void {
+    this.addEvent(new AccountDeleted({ userId: this.id, deletedAt }));
   }
 }

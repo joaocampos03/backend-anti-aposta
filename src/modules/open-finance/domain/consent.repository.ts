@@ -8,6 +8,9 @@ export interface ConsentRepository {
   /** The one that governs what this user is sharing right now, if any. */
   findAuthorisedByUserId(userId: UniqueEntityId, moment: Date): Promise<Consent | null>;
   findLatestByUserId(userId: UniqueEntityId): Promise<Consent | null>;
+  findAllByUserId(userId: UniqueEntityId): Promise<readonly Consent[]>;
+  /** Accounts, statement, tokens and pending authorisations cascade from these rows. */
+  deleteAllForUser(userId: UniqueEntityId): Promise<void>;
   /**
    * The consent a DataHolder's notice is about. The notice names the consent
    * by the institution's own id, the one its tokens are bound to; whose it is

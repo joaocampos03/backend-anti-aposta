@@ -8,6 +8,11 @@ export interface IdentityRouteDependencies {
   readonly validateRegisterUserBody: RequestHandler;
   readonly validateSignInBody: RequestHandler;
   readonly validateResetPasswordBody: RequestHandler;
+  readonly validateChangeDisplayNameBody: RequestHandler;
+  readonly validateChangeEmailBody: RequestHandler;
+  readonly validateChangePasswordBody: RequestHandler;
+  readonly validateDeleteAccountBody: RequestHandler;
+  readonly requireSession: RequestHandler;
   /** Per-IP limits on the unauthenticated writes in this module. */
   readonly registrationRateLimits: readonly RequestHandler[];
   readonly signInRateLimits: readonly RequestHandler[];
@@ -52,6 +57,52 @@ export function identityRoutes(dependencies: IdentityRouteDependencies): Router 
     ...dependencies.passwordResetRateLimits,
     dependencies.validateResetPasswordBody,
     dependencies.controller.resetPassword,
+  );
+
+  router.get(
+    '/identity/users/current',
+    internalErrorMessage(IDENTITY_MESSAGES.accountUnavailable),
+    dependencies.requireSession,
+    dependencies.controller.account,
+  );
+
+  router.put(
+    '/identity/users/current/display-name',
+    internalErrorMessage(IDENTITY_MESSAGES.accountChangeUnavailable),
+    dependencies.requireSession,
+    dependencies.validateChangeDisplayNameBody,
+    dependencies.controller.changeDisplayName,
+  );
+
+  router.put(
+    '/identity/users/current/email',
+    internalErrorMessage(IDENTITY_MESSAGES.accountChangeUnavailable),
+    dependencies.requireSession,
+    dependencies.validateChangeEmailBody,
+    dependencies.controller.changeEmail,
+  );
+
+  router.put(
+    '/identity/users/current/password',
+    internalErrorMessage(IDENTITY_MESSAGES.passwordChangeUnavailable),
+    dependencies.requireSession,
+    dependencies.validateChangePasswordBody,
+    dependencies.controller.changePassword,
+  );
+
+  router.delete(
+    '/identity/sessions/others',
+    internalErrorMessage(IDENTITY_MESSAGES.accountChangeUnavailable),
+    dependencies.requireSession,
+    dependencies.controller.endOtherSessions,
+  );
+
+  router.post(
+    '/identity/users/current/deletion',
+    internalErrorMessage(IDENTITY_MESSAGES.accountDeletionUnavailable),
+    dependencies.requireSession,
+    dependencies.validateDeleteAccountBody,
+    dependencies.controller.deleteAccount,
   );
 
   return router;

@@ -91,6 +91,10 @@ gamification.DescribeBettingCeiling reads, never writes, across two boundaries:
   open-finance.SummariseSpendByMonth   (the charts' own months)  via OpenFinanceMonthlyBetHistoryReader
   awareness.AmountReframing            (the rate)                via AwarenessYieldCalculator
 
+identity.DeleteAccount calls, never publishes, because the user row may only go once all confirm:
+  bet-detection.ForgetUserClassifications, gamification.ForgetGamificationAccount,
+  notifications.ForgetNotifications, open-finance.EraseOpenFinanceAccount   via ModularAccountErasure
+
 open-finance.RevokeConsent
   -> ConsentRevoked { userId, consentId, revokedAt }
        -> open-finance.PurgeUserFinancialData    # transactions, accounts, bank tokens, pending authorisations

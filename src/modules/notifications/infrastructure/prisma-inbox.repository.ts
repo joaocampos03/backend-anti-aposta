@@ -13,6 +13,10 @@ export class PrismaInboxRepository implements InboxRepository {
     await this.client.inbox.upsert({ where: { userId: row.userId }, create: row, update: row });
   }
 
+  async deleteByUserId(userId: UniqueEntityId): Promise<void> {
+    await this.client.inbox.deleteMany({ where: { userId: userId.value } });
+  }
+
   async findByUserId(userId: UniqueEntityId): Promise<Inbox | null> {
     const row = await this.client.inbox.findUnique({ where: { userId: userId.value } });
 

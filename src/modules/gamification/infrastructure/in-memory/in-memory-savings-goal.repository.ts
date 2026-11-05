@@ -4,7 +4,7 @@ import type { SavingsGoal } from '../../domain/savings-goal.js';
 import type { SavingsGoalRepository } from '../../domain/savings-goal.repository.js';
 
 export class InMemorySavingsGoalRepository implements SavingsGoalRepository {
-  readonly goals: SavingsGoal[] = [];
+  goals: SavingsGoal[] = [];
   /** Makes the next save lose the race, as a second request would make it. */
   conflictOnNextSave = false;
 
@@ -18,6 +18,10 @@ export class InMemorySavingsGoalRepository implements SavingsGoalRepository {
     if (!this.goals.some((stored) => stored.equals(goal))) {
       this.goals.push(goal);
     }
+  }
+
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    this.goals = this.goals.filter((stored) => !stored.userId.equals(userId));
   }
 
   async findByIdAndUserId(goalId: UniqueEntityId, userId: UniqueEntityId): Promise<SavingsGoal | null> {

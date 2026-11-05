@@ -42,6 +42,16 @@ export class PrismaConsentRepository implements ConsentRepository {
     return row === null ? null : ConsentMapper.toDomain(row);
   }
 
+  async findAllByUserId(userId: UniqueEntityId): Promise<readonly Consent[]> {
+    const rows = await this.client.consent.findMany({ where: { userId: userId.value } });
+
+    return rows.map((row) => ConsentMapper.toDomain(row));
+  }
+
+  async deleteAllForUser(userId: UniqueEntityId): Promise<void> {
+    await this.client.consent.deleteMany({ where: { userId: userId.value } });
+  }
+
   async findLatestByUserId(userId: UniqueEntityId): Promise<Consent | null> {
     const row = await this.client.consent.findFirst({
       where: { userId: userId.value },

@@ -9,4 +9,5 @@ export interface BettingCeilingRepository {
    */
   save(ceiling: BettingCeiling): Promise<void>;
   findByUserId(userId: UniqueEntityId): Promise<BettingCeiling | null>;
+  deleteAllForUser(userId: UniqueEntityId): Promise<void>;
 }
