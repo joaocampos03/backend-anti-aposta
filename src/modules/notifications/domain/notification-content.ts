@@ -49,6 +49,11 @@ export interface GoalReachedContent {
 export interface TransactionsIngestedContent {
   readonly kind: 'TRANSACTIONS_INGESTED';
   readonly ingestedCount: number;
+  /**
+   * Which rows the list quotes: the newest few, as ids and nothing more. What they
+   * were is read from the statement every time, so nothing financial is kept here.
+   */
+  readonly transactionIds: readonly string[];
 }
 
 export type NotificationContent =

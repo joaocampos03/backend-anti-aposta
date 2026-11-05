@@ -79,6 +79,7 @@ import {
   PurgeUserFinancialData,
   SummariseSpendByMonth,
   SyncStatusLookup,
+  PrismaMovementLineQuery,
   TransactionAmountLookup,
   TransactionsIngested,
 } from '@modules/open-finance/index.js';
@@ -168,6 +169,8 @@ import {
   AnnounceIngestedTransactions,
   CreateInbox,
 } from '@modules/notifications/index.js';
+import { ListNotifications } from '@modules/notifications/application/list-notifications.use-case.js';
+import { MarkNotificationsRead } from '@modules/notifications/application/mark-notifications-read.use-case.js';
 import { NotificationDelivery } from '@modules/notifications/application/notification-delivery.js';
 import { NOTIFICATIONS_MESSAGES } from '@modules/notifications/application/notifications.messages.js';
 import { notificationsFailures } from '@modules/notifications/application/notifications.failures.js';
@@ -175,11 +178,13 @@ import { ReplayNotifications } from '@modules/notifications/application/replay-n
 import { SendDemoNotification } from '@modules/notifications/application/send-demo-notification.use-case.js';
 import { AwarenessYieldCalculator as NotificationsYieldCalculator } from '@modules/notifications/infrastructure/awareness-yield-calculator.js';
 import { InProcessNotificationStream } from '@modules/notifications/infrastructure/in-process-notification-stream.js';
+import { OpenFinanceMovementReader } from '@modules/notifications/infrastructure/open-finance-movement-reader.js';
 import { PrismaInboxRepository } from '@modules/notifications/infrastructure/prisma-inbox.repository.js';
 import { PrismaNotificationRepository } from '@modules/notifications/infrastructure/prisma-notification.repository.js';
 import { NotificationsController } from '@modules/notifications/http/notifications.controller.js';
 import {
   demoNotificationBodySchema,
+  readReceiptBodySchema,
   recipientParamsSchema,
 } from '@modules/notifications/http/notifications.schemas.js';
 import type { NotificationsRouteDependencies } from '@modules/notifications/http/notifications.routes.js';
@@ -349,6 +354,7 @@ export function buildContainer(input: ContainerInput): AppDependencies {
   const inboxes = new PrismaInboxRepository(input.prisma);
   const notificationRecords = new PrismaNotificationRepository(input.prisma);
   const notificationStream = new InProcessNotificationStream();
+  const movementReader = new OpenFinanceMovementReader(new PrismaMovementLineQuery(input.prisma));
   const notificationDelivery = new NotificationDelivery({
     inboxes,
     notifications: notificationRecords,
@@ -519,7 +525,10 @@ export function buildContainer(input: ContainerInput): AppDependencies {
 
   subscribeToIngestion({
     eventBus,
-    announceIngestedTransactions: new AnnounceIngestedTransactions(notificationDelivery),
+    announceIngestedTransactions: new AnnounceIngestedTransactions(
+      notificationDelivery,
+      movementReader,
+    ),
   });
 
   // Achievements are measured against the figures the other screens read. They
@@ -718,6 +727,8 @@ export function buildContainer(input: ContainerInput): AppDependencies {
       delivery: notificationDelivery,
       stream: notificationStream,
       notifications: notificationRecords,
+      movements: movementReader,
+      clock,
       yields: new NotificationsYieldCalculator(reframing),
       sessionGuard,
     }),
@@ -839,6 +850,8 @@ interface NotificationsWiring {
   readonly delivery: NotificationDelivery;
   readonly stream: InProcessNotificationStream;
   readonly notifications: PrismaNotificationRepository;
+  readonly movements: OpenFinanceMovementReader;
+  readonly clock: Clock;
   readonly yields: NotificationsYieldCalculator;
   readonly sessionGuard: RequestHandler;
 }
@@ -855,11 +868,14 @@ function buildNotifications(wiring: NotificationsWiring): NotificationsRouteDepe
       demoNotificationBodySchema,
       notificationsFailures.validationFailed,
     ),
+    readReceiptBody: validateBody(readReceiptBodySchema, notificationsFailures.validationFailed),
   };
 
   return {
     controller: new NotificationsController(
       {
+        listNotifications: new ListNotifications(wiring.notifications, wiring.movements),
+        markNotificationsRead: new MarkNotificationsRead(wiring.notifications, wiring.clock),
         replayNotifications: new ReplayNotifications(wiring.notifications),
         sendDemoNotification: new SendDemoNotification(wiring.delivery, wiring.yields),
       },
@@ -869,6 +885,7 @@ function buildNotifications(wiring: NotificationsWiring): NotificationsRouteDepe
     requireSession: wiring.sessionGuard,
     validateRecipientParams: inputs.recipientParams.middleware,
     validateDemoNotificationBody: inputs.demoNotificationBody.middleware,
+    validateReadReceiptBody: inputs.readReceiptBody.middleware,
     demoRateLimits: wiring.input.sandboxBank.ledgerWritesEnabled
       ? [
           windowedRateLimit({
@@ -1120,8 +1137,8 @@ interface IngestionSubscribers {
 /**
  * New movements reached the statement — after the button, after the first
  * synchronisation of a consent, or after the institution's notice — so the
- * person's open screens are told to read it again. A count travels, never a
- * movement: the statement says what they were, behind the session.
+ * person's open screens are told to read it again. A count and ids travel, never
+ * a movement: the statement says what they were, behind the session.
  */
 function subscribeToIngestion(subscribers: IngestionSubscribers): void {
   subscribers.eventBus.subscribe(TransactionsIngested.NAME, async (event) => {
@@ -1131,7 +1148,7 @@ function subscribeToIngestion(subscribers: IngestionSubscribers): void {
 
     await subscribers.announceIngestedTransactions.execute({
       userId: event.payload.userId,
-      ingestedCount: event.payload.transactionIds.length,
+      transactionIds: event.payload.transactionIds,
     });
   });
 }

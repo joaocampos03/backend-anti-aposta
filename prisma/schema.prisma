@@ -503,13 +503,15 @@ enum NotificationKind {
 /// stream an optimisation: a row exists before any browser sees it, and its
 /// UUID v7 id is what a reconnecting stream resumes after. `content` holds the
 /// kind's display fields — amounts in cents and short text, never a raw
-/// statement line or a token.
+/// statement line or a token. A person keeps their newest 50. `read_at` is null
+/// until they have seen it in their list.
 model Notification {
   id          String           @id @db.Uuid
   recipientId String           @map("recipient_id") @db.Uuid
   kind        NotificationKind
   content     Json
   createdAt   DateTime         @map("created_at") @db.Timestamptz(3)
+  readAt      DateTime?        @map("read_at") @db.Timestamptz(3)
 
   @@index([recipientId, id])
   @@map("notifications_notifications")

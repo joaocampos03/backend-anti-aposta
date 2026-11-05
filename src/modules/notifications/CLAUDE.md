@@ -11,7 +11,7 @@ of truth; the SSE stream is an optimisation over it.
   fields), the recipient, and an instant. `Notification.compose` refuses what a person could not
   read: a blank or over-long line (140 characters), a fraction of a cent, a zero count, a nudge for
   a zero amount. Its id is a UUID v7, so it is ordered by time — that is what the stream resumes
-  after.
+  after. `readAt` is null until the person has seen it in their list.
 
 | Kind | Fields | Comes from |
 | --- | --- | --- |
@@ -19,21 +19,52 @@ of truth; the SSE stream is an optimisation over it.
 | `BADGE_AWARDED` | `badgeId`, `title`, `description` | `gamification.BadgesAwarded` (one per evaluation, worded there), and the demo console |
 | `STREAK_BROKEN` | `previousDays` | the demo console today; `StreakBroken` later |
 | `GOAL_REACHED` | `label`, `amountInCents` | the demo console today |
-| `TRANSACTIONS_INGESTED` | `ingestedCount` | `open-finance.TransactionsIngested`, from any synchronisation |
+| `TRANSACTIONS_INGESTED` | `ingestedCount`, `transactionIds` (stored) / `movements` (wire) | `open-finance.TransactionsIngested`, from any synchronisation |
 
-`TRANSACTIONS_INGESTED` carries a count and nothing about the movements: the statement says what
-they were, behind the session. A run that ingested nothing announces nothing.
+`TRANSACTIONS_INGESTED` stores a count and the ids of the newest five rows (`MOVEMENT_LINES_KEPT`),
+and nothing about the movements. A run that ingested nothing announces nothing.
+
+**What the movements were is read, never kept.** `ListNotifications` resolves the ids through
+`MovementReader` (`open-finance.PrismaMovementLineQuery`) on every read, behind the session, in one
+query for the whole inbox. Keeping a copy would be wrong twice: a correction would leave the inbox
+calling a row a bet, and a revoked consent would leave financial data behind that
+`PurgeUserFinancialData` does not reach (LGPD art. 18). As it is, the ids stop resolving and the
+notification keeps its count. **Do not add amounts or names to this content.**
 
 ## Delivery
 
 `NotificationDelivery` stores first and pushes second, so a push nobody is connected to receive is
 not lost. It is shared by every use case that tells somebody something, so none of them calls
-another. The push goes through the `NotificationChannel` port; `InProcessNotificationStream` is a
+another. It is also the **only** way into an inbox: no route lets a client store a notification,
+because what the platform told somebody is the platform's to say. The demonstration console below
+is the exception, and it goes through the same delivery.
+
+**A person keeps their newest 50** (`INBOX_CAPACITY`): each delivery drops whatever is older, read
+or not. The list caps again on read, so a race between two deliveries never shows a longer list. The push goes through the `NotificationChannel` port; `InProcessNotificationStream` is a
 per-user fan-out in this process. It does not cross instances — a second API process would need a
 broker behind the same port, which the inbox makes safe to add.
 
 A nudge's yield is **never** taken from the caller. `SendDemoNotification` reframes the amount
 through `awareness` (the `YieldCalculator` port), and the request schema has no yield field.
+
+## The list — `GET /api/v1/notifications` and `POST /api/v1/notifications/read-receipts`
+
+Both session-scoped, the caller's own only.
+
+| Method | Path | Request | Response | Errors |
+| --- | --- | --- | --- | --- |
+| `GET` | `/notifications` | — | `200 { items, nextCursor: null }`, newest first, each in the stream's shape, with `movements` filled in | `401` |
+| `POST` | `/notifications/read-receipts` | `{ notificationIds: uuid[] }`, 1 to 50 | `204` | `401`, `422 VALIDATION_FAILED` |
+
+- **`movements`** is `[{ transactionId, occurredAt, counterparty, amountInCents, bet }]`, newest
+  first; `bet` is `{ matchedBy, confidence }` or `null`. The stream always sends it empty: it carries
+  a count, never a movement.
+- **The list never pages.** The whole inbox fits in one answer, so `nextCursor` is always `null`; it
+  keeps the collection envelope every other list uses.
+- **A receipt names ids rather than saying "all"**, so one that arrived a moment later stays unread.
+- **The first reading stays.** Repeating a receipt changes nothing, which makes it safe to retry.
+- **Somebody else's id is skipped and still answers `204`**: a 404 for one id in a batch would
+  confirm the others exist.
 
 ## The stream — `GET /api/v1/notifications/stream`
 
@@ -42,7 +73,7 @@ Session-scoped: the caller's own notifications only. Each frame is a named event
 ```
 id: <notification id>
 event: <KIND>
-data: {"id":"…","createdAt":"…","kind":"<KIND>",…fields}
+data: {"id":"…","createdAt":"…","readAt":null,"kind":"<KIND>",…fields}
 ```
 
 - `retry: 3000` once on open, and a `: heartbeat` comment every 15 s.

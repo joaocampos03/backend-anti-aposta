@@ -28,6 +28,8 @@ export type { BetWindowEntry } from './infrastructure/betting-window.query.js';
 export { PrismaCategorySpendQuery } from './infrastructure/category-spend.query.js';
 export type { CategorySpendOverMonths } from './infrastructure/category-spend.query.js';
 export { PrismaMonthlyBetSpendQuery } from './infrastructure/monthly-bet-spend.query.js';
+export { PrismaMovementLineQuery } from './infrastructure/movement-line.query.js';
+export type { MovementLineEntry } from './infrastructure/movement-line.query.js';
 export { ConsentRevoked } from './domain/events/consent-revoked.js';
 export type { ConsentRevokedPayload } from './domain/events/consent-revoked.js';
 export { TransactionsIngested } from './domain/events/transactions-ingested.js';

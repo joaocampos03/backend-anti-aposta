@@ -5,7 +5,7 @@ import { fail, ok, type Result } from '@shared/domain/result.js';
 import { UniqueEntityId } from '@shared/domain/unique-entity-id.js';
 import type { InboxRepository } from '../domain/inbox.repository.js';
 import type { NotificationContent } from '../domain/notification-content.js';
-import { Notification } from '../domain/notification.js';
+import { INBOX_CAPACITY, Notification } from '../domain/notification.js';
 import type { NotificationRepository } from '../domain/notification.repository.js';
 import type { NotificationDto } from './dto/notification.dto.js';
 import { notificationsFailures } from './notifications.failures.js';
@@ -53,6 +53,7 @@ export class NotificationDelivery {
     }
 
     await this.dependencies.notifications.save(composed.value);
+    await this.dependencies.notifications.retainNewest(recipient, INBOX_CAPACITY);
 
     const delivered = toNotificationDto(composed.value);
     this.dependencies.channel.push(delivered);
@@ -66,6 +67,8 @@ export function toNotificationDto(notification: Notification): NotificationDto {
     id: notification.id.value,
     recipientId: notification.recipientId.value,
     createdAt: notification.createdAt.toISOString(),
+    readAt: notification.readAt?.toISOString() ?? null,
     content: notification.content,
+    movements: [],
   };
 }

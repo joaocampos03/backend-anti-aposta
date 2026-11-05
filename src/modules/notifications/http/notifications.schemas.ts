@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAXIMUM_TEXT_LENGTH } from '../domain/notification.js';
+import { INBOX_CAPACITY, MAXIMUM_TEXT_LENGTH } from '../domain/notification.js';
 
 const text = z.string().trim().min(1).max(MAXIMUM_TEXT_LENGTH);
 const cents = z.number().int();
@@ -8,6 +8,12 @@ const count = z.number().int().positive();
 export const recipientParamsSchema = z.object({ userId: z.uuid() });
 
 export type RecipientParams = z.infer<typeof recipientParamsSchema>;
+
+export const readReceiptBodySchema = z.strictObject({
+  notificationIds: z.array(z.uuid()).min(1).max(INBOX_CAPACITY),
+});
+
+export type ReadReceiptBody = z.infer<typeof readReceiptBodySchema>;
 
 /**
  * One shape per kind. A nudge has no yield field on purpose: `awareness`

@@ -7,4 +7,7 @@ export const NOTIFICATIONS_MESSAGES = {
   deliveryUnavailable: 'Não conseguimos enviar a notificação agora. Tente novamente em instantes.',
   tooManyDemoNotifications: 'Muitas notificações em pouco tempo. Tente novamente em instantes.',
   streamUnavailable:'Não conseguimos abrir as notificações agora. Tente novamente em instantes.',
+  listUnavailable: 'Não conseguimos carregar as notificações agora. Tente novamente em instantes.',
+  readReceiptUnavailable:
+    'Não conseguimos marcar as notificações como lidas. Tente novamente em instantes.',
 } as const;
