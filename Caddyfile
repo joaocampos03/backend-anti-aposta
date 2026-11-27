@@ -1,0 +1,4 @@
+# HTTPS is automatic. Server-Sent Events are flushed immediately by default.
+{$API_DOMAIN} {
+	reverse_proxy api:3333
+}
