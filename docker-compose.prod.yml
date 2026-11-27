@@ -1,0 +1,61 @@
+# Production, on a single VPS.
+# Only Caddy publishes ports: the API and Postgres are reachable inside the
+# compose network and nowhere else.
+
+name: anti-aposta
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: antiapostadb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d antiapostadb']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/antiapostadb?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/antiapostadb?schema=public
+      # Caddy is the only hop that reaches the API, over the private network.
+      TRUST_PROXY: uniquelocal
+      # The sandbox bank runs in this same process, still reached over HTTP.
+      SANDBOX_BANK_BASE_URL: http://localhost:3333/sandbox/open-finance/v2
+      OPEN_FINANCE_NOTICE_URI: http://localhost:3333/api/v1/data-holder-notices
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set it in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates. Losing this volume means asking Let's Encrypt again.
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
